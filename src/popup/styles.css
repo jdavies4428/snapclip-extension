@@ -1,0 +1,91 @@
+:root {
+  color: #e7ecf3;
+  background:
+    radial-gradient(circle at top right, rgba(79, 140, 255, 0.22), transparent 38%),
+    linear-gradient(180deg, #101727 0%, #0b1020 100%);
+  font-family: "SF Pro Display", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 360px;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.popup-shell {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.popup-header h1 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #7fb6ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lede,
+.status {
+  margin: 0;
+  color: #b9c4d8;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.mode-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mode-title {
+  font-weight: 700;
+}
+
+.mode-description {
+  color: #b9c4d8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #67c4ff 0%, #3d7bff 100%);
+  color: #04111e;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e7ecf3;
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
