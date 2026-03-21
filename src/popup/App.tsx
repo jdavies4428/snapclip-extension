@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import type { SnapClipMessageResponse } from '../shared/messaging/messages';
 
 export default function App() {
-  const [status, setStatus] = useState('Choose whether to clip the full visible tab or a selected area.');
+  const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   function isLaunchablePage(url?: string): boolean {
     if (!url) {
@@ -47,15 +46,15 @@ export default function App() {
         throw new Error('No supported page tab was found.');
       }
 
-      if (clipMode === 'visible') {
-        await openPanelForCurrentWindow();
-      }
-      void chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type: 'start-clip-workflow',
         clipMode,
         tabId: tab.id,
         windowId: tab.windowId,
       });
+      if (!response?.ok) {
+        throw new Error(response?.error || 'Failed to start clipping.');
+      }
       window.close();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to start clipping.');
@@ -78,8 +77,18 @@ export default function App() {
     <main className="popup-shell">
       <header className="popup-header">
         <p className="eyebrow">LLM Clip</p>
-        <h1>Clip the current tab</h1>
-        <p className="lede">Full-tab snap happens instantly. Region mode opens the picker on the current page.</p>
+        <div className="header-row">
+          <h1>Clip fast</h1>
+          <button
+            aria-label="Close popup"
+            className="ghost-button close-button"
+            onClick={() => window.close()}
+            type="button"
+          >
+            X
+          </button>
+        </div>
+        <p className="lede">Shortcuts are the fastest path. The popup is just a quick launcher.</p>
       </header>
 
       <section className="mode-list" aria-label="Clip actions">
@@ -91,12 +100,28 @@ export default function App() {
         </button>
       </section>
 
-      <button className="secondary" onClick={handleOpenPanel} type="button">
-        Open side panel
-      </button>
+      <section className="shortcut-list" aria-label="Keyboard shortcuts">
+        <div className="shortcut-chip">
+          <span>Area</span>
+          <kbd>Option/Alt + Shift + S</kbd>
+        </div>
+        <div className="shortcut-chip">
+          <span>Visible</span>
+          <kbd>Option/Alt + Shift + D</kbd>
+        </div>
+      </section>
 
-      <p className="status">{status}</p>
-      <p className="mode-description">Chrome can override shortcuts in `chrome://extensions/shortcuts`. Browser pages, extension pages, Chrome Web Store, and PDFs are blocked.</p>
+      <div className="footer-row">
+        <button className="ghost-button" onClick={handleOpenPanel} type="button">
+          Open side panel
+        </button>
+        <button className="ghost-button" onClick={() => window.close()} type="button">
+          Close
+        </button>
+      </div>
+
+      {status ? <p className="status">{status}</p> : null}
+      <p className="mode-description">You can change shortcuts in `chrome://extensions/shortcuts`.</p>
     </main>
   );
 }

@@ -38,6 +38,13 @@ input {
   font-size: 24px;
 }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .eyebrow {
   margin: 0;
   color: #7fb6ff;
@@ -58,6 +65,34 @@ input {
 .mode-list {
   display: grid;
   gap: 10px;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: 10px;
+}
+
+.shortcut-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce7f7;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shortcut-chip kbd {
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(8, 15, 28, 0.72);
+  border: 1px solid rgba(127, 182, 255, 0.18);
+  color: #9fd6ff;
+  font: inherit;
+  font-size: 12px;
 }
 
 .mode-title {
@@ -83,6 +118,25 @@ button {
 button.secondary {
   background: rgba(255, 255, 255, 0.08);
   color: #e7ecf3;
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e7ecf3;
+}
+
+.close-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.footer-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 button:disabled {

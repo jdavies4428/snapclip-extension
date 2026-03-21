@@ -16,6 +16,7 @@ export type CommitClipMessage = {
   type: 'commit-clip';
   clipMode: ClipMode;
   title?: string;
+  note?: string;
   imageDataUrl: string;
   imageWidth: number;
   imageHeight: number;
@@ -62,6 +63,11 @@ export type OffscreenCopyImageMessage = {
   dataUrl: string;
 };
 
+export type CancelClipOverlayMessage = {
+  type: 'cancel-clip-overlay';
+  tabId?: number;
+};
+
 export type SnapClipMessage =
   | OpenSidePanelMessage
   | StartClipWorkflowMessage
@@ -72,7 +78,8 @@ export type SnapClipMessage =
   | UpdateClipAnnotationsMessage
   | ExportClipSessionMessage
   | OffscreenCopyTextMessage
-  | OffscreenCopyImageMessage;
+  | OffscreenCopyImageMessage
+  | CancelClipOverlayMessage;
 
 export type SnapClipMessageResponse =
   | { ok: true; session?: ClipSession }

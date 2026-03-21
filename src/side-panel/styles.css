@@ -414,9 +414,96 @@ button.secondary {
   background: #050811;
 }
 
+.screenshot-preview-loading {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  color: #88a2c6;
+}
+
+.editor-launch-card {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+}
+
+.editor-launch-hint {
+  color: #9eb2cf;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .annotation-shell {
   display: grid;
   gap: 12px;
+}
+
+.clip-editor-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 8, 18, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.clip-editor-modal {
+  width: min(1280px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(157, 177, 207, 0.18);
+  background: rgba(10, 16, 28, 0.98);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+.clip-editor-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clip-editor-modal-head h2 {
+  margin: 4px 0 8px;
+}
+
+.clip-editor-close {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.clip-editor-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  min-height: 0;
+}
+
+.clip-editor-stage {
+  min-height: 0;
+}
+
+.clip-editor-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+}
+
+.clip-title-input-compact {
+  font-size: 18px;
 }
 
 .context-grid {
@@ -634,6 +721,64 @@ button.secondary {
   box-sizing: border-box;
 }
 
+.annotation-text-composer {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  width: min(260px, calc(100% - 24px));
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #ff8a5b;
+  background: rgba(8, 15, 28, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.annotation-text-composer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: grab;
+  color: #88d5ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.annotation-text-composer-close {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.annotation-text-composer-input {
+  width: 100%;
+  min-height: 86px;
+  box-sizing: border-box;
+  resize: none;
+  border-radius: 12px;
+  border: 1px solid rgba(103, 209, 255, 0.24);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef4fb;
+  font: inherit;
+}
+
+.annotation-text-composer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.annotation-text-composer-actions .secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #edf3fb;
+}
+
 .note-input {
   min-height: 110px;
   width: 100%;
@@ -675,5 +820,15 @@ button.secondary {
 
   .field-block-wide {
     grid-column: auto;
+  }
+
+  .clip-editor-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .clip-editor-modal-grid {
+    grid-template-columns: 1fr;
   }
 }

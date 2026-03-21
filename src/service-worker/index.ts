@@ -1,7 +1,7 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { startClipWorkflow } from './clipping';
-import { ensureSupportedWindow, getSupportedActiveTab } from './permissions';
+import { getSupportedActiveTab } from './permissions';
 import { routeMessage } from './router';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -13,16 +13,20 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.commands.onCommand.addListener(async (command) => {
   try {
     const tab = await getSupportedActiveTab();
-    const windowId = ensureSupportedWindow(tab.windowId);
     await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
 
     if (command === 'start-region-clip') {
-      await startClipWorkflow('region');
+      await startClipWorkflow('region', {
+        tabId: tab.id,
+        windowId: tab.windowId,
+      });
     }
 
     if (command === 'start-visible-clip') {
-      await chrome.sidePanel.open({ windowId });
-      await startClipWorkflow('visible');
+      await startClipWorkflow('visible', {
+        tabId: tab.id,
+        windowId: tab.windowId,
+      });
     }
   } catch (error) {
     console.error('Failed to handle command', error);
@@ -34,7 +38,10 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 chrome.runtime.onMessage.addListener((message: SnapClipMessage, _sender, sendResponse) => {
-  if (message.type === 'offscreen-copy-text' || message.type === 'offscreen-copy-image') {
+  if (
+    message.type === 'offscreen-copy-text' ||
+    message.type === 'offscreen-copy-image'
+  ) {
     return false;
   }
 

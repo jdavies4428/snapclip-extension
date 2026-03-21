@@ -1,6 +1,6 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
-import { startClipWorkflow } from './clipping';
+import { cancelClipOverlay, startClipWorkflow } from './clipping';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
 import { getClipSession, updateClipAnnotations, updateClipNote, updateClipTitle } from './storage';
@@ -45,6 +45,10 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
     case 'commit-clip': {
       const session = await commitClipToSession(message);
       return { ok: true, session };
+    }
+    case 'cancel-clip-overlay': {
+      await cancelClipOverlay(message.tabId);
+      return { ok: true };
     }
     case 'get-clip-session': {
       const session = await getOrCreateSession();

@@ -12,12 +12,13 @@
 ## Next milestone
 
 - capture reliability hardening
+- modal-first authoring polish
+- session gallery ergonomics
+- tabbed evidence inspector
 - deterministic Claude/Codex bundle contract
 - localhost bridge delivery with preserved bundle failures
-- evidence quality and redaction
 
 ## Later
 
-- richer annotation workbench
 - bounded opt-in debug mode
 - deep debugger decision gate

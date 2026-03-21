@@ -42,6 +42,50 @@ function isBridgeReadyMessage(error: unknown): string {
   return 'LLM Clip could not reach the local handoff bridge.';
 }
 
+async function ensureOffscreenDocument() {
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen/index.html',
+      reasons: ['CLIPBOARD'],
+      justification: 'Copy clip images and packet summaries from the side panel.',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('Only a single offscreen document may be created')) {
+      throw error;
+    }
+  }
+}
+
+async function copyTextToClipboard(text: string) {
+  await ensureOffscreenDocument();
+  const response = (await chrome.runtime.sendMessage({
+    type: 'offscreen-copy-text',
+    text,
+  })) as SnapClipMessageResponse;
+
+  if (!response.ok) {
+    throw new Error(response.error || 'Clipboard copy failed.');
+  }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const base64 = await blobToBase64(blob);
+  return `data:${blob.type || 'image/png'};base64,${base64}`;
+}
+
+async function copyBlobImageToClipboard(blob: Blob) {
+  await ensureOffscreenDocument();
+  const response = (await chrome.runtime.sendMessage({
+    type: 'offscreen-copy-image',
+    dataUrl: await blobToDataUrl(blob),
+  })) as SnapClipMessageResponse;
+
+  if (!response.ok) {
+    throw new Error(response.error || 'Image copy failed.');
+  }
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -59,17 +103,20 @@ function ClipThumbnailButton({
   index,
   isActive,
   onSelect,
+  onEdit,
 }: {
   clip: ClipRecord;
   index: number;
   isActive: boolean;
   onSelect: (clipId: string) => void;
+  onEdit: (clipId: string) => void;
 }) {
   const imageUrl = useClipAssetUrl(clip.imageAssetId);
 
   return (
     <button
       className={`clip-thumb ${isActive ? 'clip-thumb-active' : ''}`}
+      onDoubleClick={() => onEdit(clip.id)}
       onClick={() => onSelect(clip.id)}
       type="button"
     >
@@ -111,6 +158,8 @@ export default function App() {
   const [handoffScope, setHandoffScope] = useState<HandoffScope>('active_clip');
   const [evidenceProfile, setEvidenceProfile] = useState<EvidenceProfile>('balanced');
   const [handoffResult, setHandoffResult] = useState<HandoffResult | null>(null);
+  const [activeOverlayTabId, setActiveOverlayTabId] = useState<number | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   useEffect(() => {
     if (!session) {
@@ -118,6 +167,7 @@ export default function App() {
     }
 
     setActiveClipId(session.activeClipId ?? session.clips.at(-1)?.id ?? null);
+    setActiveOverlayTabId(null);
   }, [session]);
 
   const activeClip = useMemo<ClipRecord | null>(() => {
@@ -317,6 +367,41 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeOverlayTabId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      event.preventDefault();
+      void chrome.runtime
+        .sendMessage({
+          type: 'cancel-clip-overlay',
+          tabId: activeOverlayTabId,
+        })
+        .then((response: SnapClipMessageResponse) => {
+          if (response.ok) {
+            setStatus('Clip cancelled.');
+            setActiveOverlayTabId(null);
+          } else {
+            setStatus(response.error);
+          }
+        })
+        .catch((error: unknown) => {
+          setStatus(error instanceof Error ? error.message : 'Failed to cancel the current clip.');
+        });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeOverlayTabId]);
+
   async function openPanelForCurrentWindow() {
     const tab = await resolveCaptureTargetTab();
     if (typeof tab?.windowId === 'number') {
@@ -406,9 +491,6 @@ export default function App() {
       }
 
       setStatus(clipMode === 'visible' ? 'Preparing visible-tab clip...' : 'Preparing region clip...');
-      if (clipMode === 'visible') {
-        await openPanelForCurrentWindow();
-      }
       const response = (await chrome.runtime.sendMessage({
         type: 'start-clip-workflow',
         clipMode,
@@ -418,10 +500,13 @@ export default function App() {
       setStatus(
         response.ok
           ? clipMode === 'visible'
-            ? 'Visible tab clipped. You are now in annotation mode.'
-            : 'Drag over the current page to select the clip area. LLM Clip will reopen the workspace after save.'
+            ? 'Visible tab opened in annotation mode.'
+            : 'Drag over the current page to select the clip area. Press Esc to cancel.'
           : response.error,
       );
+      if (response.ok) {
+        setActiveOverlayTabId(tab.id);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to start clip workflow.');
     }
@@ -484,7 +569,7 @@ export default function App() {
 
   async function copySessionReport(currentSession: ClipSession) {
     try {
-      await navigator.clipboard.writeText(createClipSessionMarkdown(currentSession));
+      await copyTextToClipboard(createClipSessionMarkdown(currentSession));
       setStatus('Session report copied to the clipboard.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Clipboard copy failed.');
@@ -501,14 +586,25 @@ export default function App() {
       if (!blob) {
         throw new Error('Clip image could not be loaded from local storage.');
       }
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob,
-        }),
-      ]);
+      await copyBlobImageToClipboard(blob);
       setStatus('Current clip image copied to the clipboard.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Image copy failed in this browser context.');
+    }
+  }
+
+  async function copyCurrentInstructions() {
+    const instructions = draftNote.trim();
+    if (!instructions) {
+      setStatus('Add a prompt first, then copy the instructions.');
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(instructions);
+      setStatus('Instructions copied to the clipboard.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Clipboard copy failed.');
     }
   }
 
@@ -641,6 +737,24 @@ export default function App() {
     };
   }, [activeClip, draftNote]);
 
+  useEffect(() => {
+    if (!isEditorOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsEditorOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isEditorOpen]);
+
   return (
     <main className="panel-shell">
       <header className="panel-header">
@@ -689,6 +803,9 @@ export default function App() {
                 <button onClick={copyCurrentImage} type="button">
                   Copy current image
                 </button>
+                <button className="secondary" onClick={copyCurrentInstructions} type="button">
+                  Copy instructions
+                </button>
                 <button className="secondary" onClick={() => startClip('visible')} type="button">
                   Save and clip visible
                 </button>
@@ -716,15 +833,27 @@ export default function App() {
                 </div>
               </dl>
 
-              <AnnotationCanvas clip={activeClip} imageUrl={activeClipImageUrl} onChange={saveAnnotations} />
+              <button
+                className="editor-launch-card"
+                onDoubleClick={() => setIsEditorOpen(true)}
+                onClick={() => setStatus('Double-click the preview to open the editor modal.')}
+                type="button"
+              >
+                {activeClipImageUrl ? (
+                  <img alt={activeClip.title} className="screenshot-preview" src={activeClipImageUrl} />
+                ) : (
+                  <div className="screenshot-preview screenshot-preview-loading">Loading clip preview...</div>
+                )}
+                <span className="editor-launch-hint">Double-click to open the editor modal</span>
+              </button>
 
               <section className="evidence-section">
-                <h3>Note</h3>
+                <h3>Prompt for the LLM</h3>
                 <textarea
                   className="note-input"
                   key={activeClip.id}
                   onChange={(event) => setDraftNote(event.target.value)}
-                  placeholder="Add context about what this clip shows before copying or exporting."
+                  placeholder="Enter prompt for the LLM..."
                   value={draftNote}
                 />
               </section>
@@ -745,12 +874,83 @@ export default function App() {
                     index={index}
                     isActive={clip.id === activeClip.id}
                     key={clip.id}
+                    onEdit={(clipId) => {
+                      setActiveClipId(clipId);
+                      setIsEditorOpen(true);
+                    }}
                     onSelect={setActiveClipId}
                   />
                 ))}
               </div>
             </aside>
           </section>
+
+          {isEditorOpen ? (
+            <div className="clip-editor-modal-backdrop" onClick={() => setIsEditorOpen(false)} role="presentation">
+              <section
+                aria-label="Clip editor"
+                className="clip-editor-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="clip-editor-modal-head">
+                  <div>
+                    <p className="eyebrow">Editor</p>
+                    <h2>{draftTitle || activeClip.title || 'Clip'}</h2>
+                    <p className="subtitle">Double-click a thumbnail to jump straight into focused editing.</p>
+                  </div>
+                  <button
+                    aria-label="Close editor"
+                    className="secondary clip-editor-close"
+                    onClick={() => setIsEditorOpen(false)}
+                    type="button"
+                  >
+                    X
+                  </button>
+                </div>
+
+                <div className="clip-editor-modal-grid">
+                  <div className="clip-editor-stage">
+                    <AnnotationCanvas clip={activeClip} imageUrl={activeClipImageUrl} onChange={saveAnnotations} />
+                  </div>
+                  <aside className="clip-editor-sidebar">
+                    <label className="field-block">
+                      <span>Clip title</span>
+                      <input
+                        className="clip-title-input clip-title-input-compact"
+                        onChange={(event) => setDraftTitle(event.target.value)}
+                        placeholder="Clip name"
+                        type="text"
+                        value={draftTitle}
+                      />
+                    </label>
+
+                    <div className="annotation-actions">
+                      <button onClick={copyCurrentImage} type="button">
+                        Copy current image
+                      </button>
+                      <button className="secondary" onClick={copyCurrentInstructions} type="button">
+                        Copy instructions
+                      </button>
+                      <button className="secondary" onClick={() => setIsEditorOpen(false)} type="button">
+                        Done
+                      </button>
+                    </div>
+
+                    <label className="field-block">
+                      <span>Prompt for the LLM</span>
+                      <textarea
+                        className="note-input"
+                        key={`${activeClip.id}-modal`}
+                        onChange={(event) => setDraftNote(event.target.value)}
+                        placeholder="Enter prompt for the LLM..."
+                        value={draftNote}
+                      />
+                    </label>
+                  </aside>
+                </div>
+              </section>
+            </div>
+          ) : null}
 
           <section className="session-context-shell">
             <div className="session-context-head">

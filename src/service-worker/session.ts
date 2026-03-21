@@ -18,6 +18,7 @@ async function startDownload(url: string, filename: string): Promise<void> {
 export async function commitClipToSession(params: {
   clipMode: ClipMode;
   title?: string;
+  note?: string;
   imageDataUrl: string;
   imageWidth: number;
   imageHeight: number;
@@ -53,7 +54,7 @@ export async function commitClipToSession(params: {
     },
     domSummary: params.pageContext.domSummary,
     runtimeContext: params.runtimeContext,
-    note: '',
+    note: params.note?.trim() ?? '',
     annotations: params.annotations ?? [],
   });
 

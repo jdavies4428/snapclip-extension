@@ -25,12 +25,16 @@ async function copyTextWithFallback(text: string): Promise<void> {
 
 async function copyImageWithFallback(dataUrl: string): Promise<void> {
   const blob = await fetch(dataUrl).then(async (response) => response.blob());
+  const html = `<img src="${dataUrl}" alt="LLM Clip capture" />`;
+  const plainText = 'LLM Clip image copied.';
 
   if ('ClipboardItem' in window && navigator.clipboard?.write) {
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
           'image/png': blob,
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' }),
         }),
       ]);
       return;
@@ -44,14 +48,18 @@ async function copyImageWithFallback(dataUrl: string): Promise<void> {
   wrapper.style.position = 'fixed';
   wrapper.style.opacity = '0';
   wrapper.style.pointerEvents = 'none';
+  wrapper.style.left = '-9999px';
+  wrapper.style.top = '0';
 
   const image = document.createElement('img');
   image.src = dataUrl;
+  await image.decode().catch(() => undefined);
   wrapper.append(image);
   document.body.append(wrapper);
+  wrapper.focus();
 
   const range = document.createRange();
-  range.selectNode(image);
+  range.selectNodeContents(wrapper);
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
