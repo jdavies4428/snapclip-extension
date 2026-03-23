@@ -682,9 +682,11 @@ function mountClipOverlay(
 
       const toolRow = document.createElement('div');
       toolRow.style.display = 'grid';
-      toolRow.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+      toolRow.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
       toolRow.style.gap = '8px';
 
+      const toolSelectButton = document.createElement('button');
+      toolSelectButton.textContent = 'Select';
       const toolTextButton = document.createElement('button');
       toolTextButton.textContent = 'Text';
       const toolBoxButton = document.createElement('button');
@@ -704,6 +706,8 @@ function mountClipOverlay(
       saveButton.textContent = 'Save clip';
       const cancelButton = document.createElement('button');
       cancelButton.textContent = 'Cancel';
+      const detailsButton = document.createElement('button');
+      detailsButton.textContent = 'System info';
 
       const hoverCard = document.createElement('div');
       hoverCard.style.position = 'fixed';
@@ -764,7 +768,7 @@ function mountClipOverlay(
         });
       };
 
-      [toolBoxButton, toolTextButton, toolArrowButton, toolUndoButton, copyButton, copyInstructionsButton, copySummaryButton, saveButton, cancelButton].forEach((button) => {
+      [toolSelectButton, toolBoxButton, toolTextButton, toolArrowButton, toolUndoButton, copyButton, copyInstructionsButton, copySummaryButton, saveButton, cancelButton, detailsButton].forEach((button) => {
         button.style.border = '0';
         button.style.borderRadius = '12px';
         button.style.padding = '11px 14px';
@@ -789,11 +793,13 @@ function mountClipOverlay(
       copySummaryButton.title = 'Copy the full text packet with prompt and context.';
 
       const hoverButtons: Array<[HTMLButtonElement, string]> = [
+        [toolSelectButton, 'Select and edit existing annotations.'],
         [copyButton, 'Copy the clipped screenshot only.'],
         [copyInstructionsButton, 'Copy just your LLM prompt from this clip.'],
         [copySummaryButton, 'Copy the full packet text: prompt, page info, and recent issues.'],
         [saveButton, 'Save this clip to the session gallery.'],
         [cancelButton, 'Close this clip without saving it.'],
+        [detailsButton, 'Open the system info and captured context screen for this clip.'],
       ];
 
       hoverButtons.forEach(([button, text]) => {
@@ -813,10 +819,16 @@ function mountClipOverlay(
       saveRow.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
       saveRow.style.gap = '8px';
 
-      toolRow.append(toolTextButton, toolBoxButton, toolArrowButton, toolUndoButton);
+      const utilityRow = document.createElement('div');
+      utilityRow.style.display = 'grid';
+      utilityRow.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      utilityRow.style.gap = '8px';
+
+      toolRow.append(toolSelectButton, toolTextButton, toolBoxButton, toolArrowButton, toolUndoButton);
       copyRow.append(copyButton, copyInstructionsButton, copySummaryButton);
       saveRow.append(saveButton, cancelButton);
-      actionRow.append(copyRow, saveRow, actionStatus, toolRow);
+      utilityRow.append(detailsButton);
+      actionRow.append(copyRow, saveRow, utilityRow, actionStatus, toolRow);
 
       const metaRow = document.createElement('div');
       metaRow.style.display = 'flex';
@@ -912,6 +924,57 @@ function mountClipOverlay(
       railScroll.style.paddingRight = '2px';
       railScroll.style.scrollbarWidth = 'none';
       railScroll.style.setProperty('-ms-overflow-style', 'none');
+
+      const composePanel = document.createElement('div');
+      composePanel.style.display = 'grid';
+      composePanel.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
+      composePanel.style.gap = '12px';
+      composePanel.style.minHeight = '0';
+
+      const detailsPanel = document.createElement('div');
+      detailsPanel.style.display = 'none';
+      detailsPanel.style.gridTemplateRows = 'auto minmax(0, 1fr)';
+      detailsPanel.style.gap = '12px';
+      detailsPanel.style.minHeight = '0';
+
+      const detailsHead = document.createElement('div');
+      detailsHead.style.display = 'flex';
+      detailsHead.style.alignItems = 'center';
+      detailsHead.style.justifyContent = 'space-between';
+      detailsHead.style.gap = '10px';
+      detailsHead.style.padding = '6px 2px 0';
+
+      const detailsTitleBlock = document.createElement('div');
+      detailsTitleBlock.style.display = 'grid';
+      detailsTitleBlock.style.gap = '4px';
+
+      const detailsEyebrow = document.createElement('div');
+      detailsEyebrow.textContent = 'DETAILS';
+      detailsEyebrow.style.color = '#88d5ff';
+      detailsEyebrow.style.fontSize = '11px';
+      detailsEyebrow.style.fontWeight = '700';
+      detailsEyebrow.style.letterSpacing = '0.08em';
+      detailsEyebrow.style.textTransform = 'uppercase';
+
+      const detailsTitle = document.createElement('h3');
+      detailsTitle.textContent = 'Clip context';
+      detailsTitle.style.margin = '0';
+      detailsTitle.style.fontSize = '16px';
+      detailsTitle.style.color = '#eef4fb';
+
+      const detailsBackButton = document.createElement('button');
+      detailsBackButton.textContent = 'Back';
+      detailsBackButton.style.border = '0';
+      detailsBackButton.style.borderRadius = '12px';
+      detailsBackButton.style.padding = '10px 14px';
+      detailsBackButton.style.font = 'inherit';
+      detailsBackButton.style.fontWeight = '700';
+      detailsBackButton.style.cursor = 'pointer';
+      detailsBackButton.style.background = 'rgba(255,255,255,0.08)';
+      detailsBackButton.style.color = '#edf3fb';
+
+      detailsTitleBlock.append(detailsEyebrow, detailsTitle);
+      detailsHead.append(detailsTitleBlock, detailsBackButton);
 
       const stage = document.createElement('div');
       stage.style.position = 'relative';
@@ -1064,7 +1127,9 @@ function mountClipOverlay(
 
       mainColumn.append(metaRow, stage);
       railScroll.append(systemCard.card, runtimeCard.card, recentCard.card);
-      sideRail.append(railHeader, noteCard, actionRow, railScroll);
+      composePanel.append(noteCard, actionRow);
+      detailsPanel.append(detailsHead, railScroll);
+      sideRail.append(railHeader, composePanel, detailsPanel);
       contentGrid.append(mainColumn, sideRail);
       editor.append(contentGrid);
       root.append(editor);
@@ -1075,7 +1140,8 @@ function mountClipOverlay(
         titleInput.setSelectionRange(length, length);
       }, 30);
 
-      let activeTool: 'text' | 'box' | 'arrow' = 'text';
+      let activeTool: 'select' | 'text' | 'box' | 'arrow' = 'select';
+      let railMode: 'compose' | 'details' = 'compose';
       let editorStartPoint: { x: number; y: number } | null = null;
       let editorDraftShape:
         | { kind: 'box'; x: number; y: number; width: number; height: number }
@@ -1086,6 +1152,8 @@ function mountClipOverlay(
 
       const annotationColor = '#ff8a5b';
       let pendingTextPoint: { x: number; y: number } | null = null;
+      let editingTextAnnotationId: string | null = null;
+      const textBounds = new Map<string, { left: number; right: number; top: number; bottom: number }>();
       let movingAnnotation:
         | {
             id: string;
@@ -1183,6 +1251,7 @@ function mountClipOverlay(
 
       const renderEditorAnnotations = () => {
         stage.querySelectorAll('[data-snapclip-annotation]').forEach((node) => node.remove());
+        textBounds.clear();
 
         const drawBox = (
           annotation: { id?: string; x: number; y: number; width: number; height: number },
@@ -1314,6 +1383,19 @@ function mountClipOverlay(
           node.style.wordBreak = 'break-word';
           node.style.boxShadow = isSelected ? '0 0 0 2px rgba(255, 214, 196, 0.35)' : 'none';
           stage.append(node);
+
+          if (annotation.id) {
+            window.requestAnimationFrame(() => {
+              const stageBounds = stage.getBoundingClientRect();
+              const nodeBounds = node.getBoundingClientRect();
+              textBounds.set(annotation.id!, {
+                left: ((nodeBounds.left - stageBounds.left) / stageBounds.width) * 100,
+                right: ((nodeBounds.right - stageBounds.left) / stageBounds.width) * 100,
+                top: ((nodeBounds.top - stageBounds.top) / stageBounds.height) * 100,
+                bottom: ((nodeBounds.bottom - stageBounds.top) / stageBounds.height) * 100,
+              });
+            });
+          }
         };
 
         annotations.forEach((annotation) => {
@@ -1341,6 +1423,7 @@ function mountClipOverlay(
 
       const closeTextComposer = (restoreFocus = true) => {
         pendingTextPoint = null;
+        editingTextAnnotationId = null;
         textComposerInput.value = '';
         textComposer.style.display = 'none';
         composerDragOffset = null;
@@ -1356,23 +1439,37 @@ function mountClipOverlay(
           return;
         }
 
-        const annotationId = `annotation_${Date.now()}`;
-        annotations = [
-          ...annotations,
-          {
-            id: annotationId,
-            kind: 'text',
-            color: annotationColor,
-            text,
-            x: pendingTextPoint.x,
-            y: pendingTextPoint.y,
-          },
-        ];
+        const textPoint = pendingTextPoint;
+        const annotationId = editingTextAnnotationId ?? `annotation_${Date.now()}`;
+        if (editingTextAnnotationId) {
+          annotations = annotations.map((annotation) =>
+            annotation.id === editingTextAnnotationId && annotation.kind === 'text'
+              ? {
+                  ...annotation,
+                  text,
+                  x: textPoint.x,
+                  y: textPoint.y,
+                }
+              : annotation,
+          );
+        } else {
+          annotations = [
+            ...annotations,
+            {
+              id: annotationId,
+              kind: 'text',
+              color: annotationColor,
+              text,
+              x: textPoint.x,
+              y: textPoint.y,
+            },
+          ];
+        }
         selectedAnnotationId = annotationId;
-        activeTool = 'box';
+        activeTool = 'select';
         renderEditorAnnotations();
-        announce('Text annotation added.', 'success');
-        setActionStatus('Text annotation added.', 'success');
+        announce(editingTextAnnotationId ? 'Text annotation updated.' : 'Text annotation added.', 'success');
+        setActionStatus(editingTextAnnotationId ? 'Text annotation updated.' : 'Text annotation added.', 'success');
         closeTextComposer();
         syncActiveTool();
       };
@@ -1404,6 +1501,27 @@ function mountClipOverlay(
         textComposerInput.value = '';
         window.setTimeout(() => {
           textComposerInput.focus();
+        }, 0);
+      };
+
+      const openExistingTextComposer = (annotation: Extract<ClipAnnotation, { kind: 'text' }>) => {
+        const bounds = stage.getBoundingClientRect();
+        editingTextAnnotationId = annotation.id;
+        pendingTextPoint = { x: annotation.x, y: annotation.y };
+        const composerWidth = Math.min(280, Math.max(220, bounds.width * 0.32));
+        const localX = clamp((annotation.x / 100) * bounds.width, 12, Math.max(12, bounds.width - composerWidth - 12));
+        const preferredTop = (annotation.y / 100) * bounds.height + 14;
+        const maxTop = Math.max(12, bounds.height - 154);
+        const localY = clamp(preferredTop, 12, maxTop);
+
+        textComposer.style.width = `${composerWidth}px`;
+        textComposer.style.left = `${localX}px`;
+        textComposer.style.top = `${localY}px`;
+        textComposer.style.display = 'grid';
+        textComposerInput.value = annotation.text;
+        window.setTimeout(() => {
+          textComposerInput.focus();
+          textComposerInput.select();
         }, 0);
       };
 
@@ -1499,11 +1617,11 @@ function mountClipOverlay(
             }
 
             if (annotation.kind === 'text') {
-              const width = Math.min(42, Math.max(16, annotation.text.length * 1.5));
-              const left = annotation.x;
-              const right = Math.min(100, annotation.x + width);
-              const top = Math.max(0, annotation.y - 8);
-              const bottom = annotation.y + 2;
+              const bounds = textBounds.get(annotation.id);
+              const left = bounds?.left ?? annotation.x;
+              const right = bounds?.right ?? Math.min(100, annotation.x + 26);
+              const top = bounds?.top ?? Math.max(0, annotation.y - 8);
+              const bottom = bounds?.bottom ?? annotation.y + 4;
               if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
                 return { annotation, mode: 'move' as const };
               }
@@ -1570,6 +1688,25 @@ function mountClipOverlay(
 
       toolUndoButton.addEventListener('click', removeLastAnnotation);
 
+      const syncRailMode = () => {
+        const showDetails = railMode === 'details';
+        composePanel.style.display = showDetails ? 'none' : 'grid';
+        detailsPanel.style.display = showDetails ? 'grid' : 'none';
+        detailsButton.textContent = showDetails ? 'Back to edit' : 'System info';
+      };
+
+      detailsButton.addEventListener('click', () => {
+        railMode = 'details';
+        syncRailMode();
+        setActionStatus('Showing clip details.');
+      });
+
+      detailsBackButton.addEventListener('click', () => {
+        railMode = 'compose';
+        syncRailMode();
+        setActionStatus('Back to editing.');
+      });
+
       copyButton.addEventListener('click', () => {
         void flashButtonState(copyButton, 'Copy image', 'Copying...', () =>
           copyImageToClipboard(clipDataUrl)
@@ -1597,7 +1734,7 @@ function mountClipOverlay(
           return;
         }
 
-        void flashButtonState(copyInstructionsButton, 'Copy instructions', 'Copying...', () =>
+        void flashButtonState(copyInstructionsButton, 'Copy prompt', 'Copying...', () =>
           copyTextToClipboard(instructionsText)
         )
           .then(() => {
@@ -1639,7 +1776,7 @@ function mountClipOverlay(
           .filter(Boolean)
           .join('\n');
 
-        void flashButtonState(copySummaryButton, 'Copy packet summary', 'Copying...', () =>
+        void flashButtonState(copySummaryButton, 'Copy summary', 'Copying...', () =>
           copyTextToClipboard(summaryText)
         )
           .then(() => {
@@ -1675,10 +1812,12 @@ function mountClipOverlay(
       });
 
       const syncActiveTool = () => {
+        toolSelectButton.style.boxShadow = activeTool === 'select' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
         toolTextButton.style.boxShadow = activeTool === 'text' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
         toolBoxButton.style.boxShadow = activeTool === 'box' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
         toolArrowButton.style.boxShadow = activeTool === 'arrow' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
-        stage.style.cursor = activeTool === 'text' ? 'text' : 'crosshair';
+        stage.style.cursor =
+          activeTool === 'text' ? 'text' : activeTool === 'select' ? 'default' : 'crosshair';
       };
 
       const setActionStatus = (
@@ -1703,6 +1842,12 @@ function mountClipOverlay(
         actionStatus.style.background = 'rgba(255,255,255,0.06)';
         actionStatus.style.color = '#dbe8f8';
       };
+
+      toolSelectButton.addEventListener('click', () => {
+        activeTool = 'select';
+        syncActiveTool();
+        setActionStatus('Select tool selected.');
+      });
 
       toolTextButton.addEventListener('click', () => {
         activeTool = 'text';
@@ -1785,6 +1930,26 @@ function mountClipOverlay(
       });
 
       syncActiveTool();
+      syncRailMode();
+
+      stage.addEventListener('dblclick', (event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button, textarea')) {
+          return;
+        }
+        const bounds = stage.getBoundingClientRect();
+        const percentPoint = toPercentPoint(event.clientX, event.clientY, bounds);
+        const hitAnnotation = hitTestAnnotation(percentPoint);
+        if (hitAnnotation?.annotation.kind === 'text') {
+          event.preventDefault();
+          event.stopPropagation();
+          selectedAnnotationId = hitAnnotation.annotation.id;
+          renderEditorAnnotations();
+          openExistingTextComposer(hitAnnotation.annotation);
+          setActionStatus('Editing text annotation.');
+          announce('Update the text, then save it.');
+        }
+      });
 
       stage.addEventListener('pointerdown', (event) => {
         if ((event.target as HTMLElement).closest('button, textarea')) {
@@ -1808,6 +1973,13 @@ function mountClipOverlay(
           editorStartPoint = null;
           stage.setPointerCapture(event.pointerId);
           announce('Drag to reposition the annotation.');
+          return;
+        }
+
+        if (activeTool === 'select') {
+          selectedAnnotationId = null;
+          renderEditorAnnotations();
+          setActionStatus('Select an annotation or choose a tool to add one.');
           return;
         }
 
@@ -1939,6 +2111,8 @@ function mountClipOverlay(
               },
             ];
             selectedAnnotationId = annotationId;
+            activeTool = 'select';
+            syncActiveTool();
           }
         } else if (activeTool === 'arrow') {
           const point = toPercentPoint(event.clientX, event.clientY, bounds);
@@ -1960,6 +2134,8 @@ function mountClipOverlay(
               },
             ];
             selectedAnnotationId = annotationId;
+            activeTool = 'select';
+            syncActiveTool();
           }
         }
 
