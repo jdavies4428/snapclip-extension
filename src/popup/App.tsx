@@ -76,9 +76,14 @@ export default function App() {
   return (
     <main className="popup-shell">
       <header className="popup-header">
-        <p className="eyebrow">LLM Clip</p>
-        <div className="header-row">
-          <h1>Clip fast</h1>
+        <div className="brand-row">
+          <div className="brand-mark" aria-hidden="true">
+            LC
+          </div>
+          <div className="brand-copy">
+            <p className="eyebrow">LLM Clip</p>
+            <p className="status-badge">Local-first capture</p>
+          </div>
           <button
             aria-label="Close popup"
             className="ghost-button close-button"
@@ -88,40 +93,68 @@ export default function App() {
             X
           </button>
         </div>
-        <p className="lede">Shortcuts are the fastest path. The popup is just a quick launcher.</p>
+        <div className="hero-copy">
+          <h1>Clip the tab, hand off the evidence.</h1>
+          <p className="lede">
+            The popup is a fast launcher. The shortcut stays primary, the bundle stays local, and the next action is
+            always obvious.
+          </p>
+        </div>
       </header>
 
-      <section className="mode-list" aria-label="Clip actions">
-        <button disabled={isLoading} onClick={() => handleStartClip('visible')} type="button">
-          {isLoading ? 'Working...' : 'Clip visible tab'}
+      <section className="action-stack" aria-label="Clip actions">
+        <button
+          className="action-card action-card-primary"
+          disabled={isLoading}
+          onClick={() => handleStartClip('visible')}
+          type="button"
+        >
+          <span className="action-kicker">Fast path</span>
+          <span className="action-title">{isLoading ? 'Working...' : 'Clip visible tab'}</span>
+          <span className="action-copy">Capture the current viewport and open the annotation workspace.</span>
         </button>
-        <button className="secondary" disabled={isLoading} onClick={() => handleStartClip('region')} type="button">
-          Clip selected area
+        <button
+          className="action-card"
+          disabled={isLoading}
+          onClick={() => handleStartClip('region')}
+          type="button"
+        >
+          <span className="action-kicker">Targeted path</span>
+          <span className="action-title">Clip selected area</span>
+          <span className="action-copy">Drag a region on the page when you only need the broken slice.</span>
         </button>
       </section>
 
-      <section className="shortcut-list" aria-label="Keyboard shortcuts">
-        <div className="shortcut-chip">
-          <span>Area</span>
-          <kbd>Option/Alt + Shift + S</kbd>
+      <section className="shortcut-panel" aria-label="Keyboard shortcuts">
+        <div className="panel-head">
+          <p className="eyebrow">Shortcuts</p>
+          <p className="panel-hint">Use these when you want to skip the popup entirely.</p>
         </div>
-        <div className="shortcut-chip">
-          <span>Visible</span>
-          <kbd>Option/Alt + Shift + D</kbd>
+        <div className="shortcut-list">
+          <div className="shortcut-chip">
+            <span>Area</span>
+            <kbd>Option/Alt + Shift + S</kbd>
+          </div>
+          <div className="shortcut-chip">
+            <span>Visible</span>
+            <kbd>Option/Alt + Shift + D</kbd>
+          </div>
         </div>
       </section>
 
-      <div className="footer-row">
-        <button className="ghost-button" onClick={handleOpenPanel} type="button">
+      <section className="utility-row" aria-label="Secondary actions">
+        <button className="ghost-button utility-button" onClick={handleOpenPanel} type="button">
           Open side panel
         </button>
-        <button className="ghost-button" onClick={() => window.close()} type="button">
-          Close
+        <button className="ghost-button utility-button" onClick={() => window.close()} type="button">
+          Dismiss
         </button>
-      </div>
+      </section>
 
-      {status ? <p className="status">{status}</p> : null}
-      <p className="mode-description">You can change shortcuts in `chrome://extensions/shortcuts`.</p>
+      <footer className="footer-stack">
+        {status ? <p className="status">{status}</p> : null}
+        <p className="mode-description">Change shortcuts in `chrome://extensions/shortcuts`.</p>
+      </footer>
     </main>
   );
 }

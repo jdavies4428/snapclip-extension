@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipAnnotation, ClipRecord } from '../../shared/types/session';
 
 type AnnotationCanvasProps = {
@@ -47,6 +47,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function getTextAnnotationSize(text: string) {
+  const normalized = text.trim() || ' ';
+  const approxCharsPerLine = 18;
+  const lines = Math.max(1, Math.ceil(normalized.length / approxCharsPerLine));
+  const width = clamp(
+    lines === 1 ? normalized.length * 1.45 + 7 : approxCharsPerLine * 1.3 + 7,
+    18,
+    42,
+  );
+  const height = clamp(5 + lines * 5.4, 10, 28);
+
+  return { height, width };
+}
+
 function ToolButton({
   label,
   isActive,
@@ -60,6 +74,8 @@ function ToolButton({
 }) {
   return (
     <button
+      aria-label={label}
+      aria-pressed={isActive}
       className={`annotation-tool-button ${isActive ? 'annotation-tool-button-active' : ''}`}
       disabled={disabled}
       onClick={onClick}
@@ -150,13 +166,13 @@ function hitTestAnnotation(
         }
 
         if (annotation.kind === 'text') {
-          const width = Math.min(42, Math.max(16, annotation.text.length * 1.5));
+          const { height, width } = getTextAnnotationSize(annotation.text);
           const top = Math.max(0, annotation.y - 8);
           if (
             point.x >= annotation.x &&
             point.x <= Math.min(100, annotation.x + width) &&
             point.y >= top &&
-            point.y <= annotation.y + 2
+            point.y <= Math.min(100, top + height)
           ) {
             return { annotation, mode: 'move' as const };
           }
@@ -193,12 +209,28 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
   const [draftShape, setDraftShape] = useState<DraftShape>(null);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [movingAnnotation, setMovingAnnotation] = useState<AnnotationInteractionState | null>(null);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(clip.annotations.at(-1)?.id ?? null);
   const [textComposer, setTextComposer] = useState<TextComposerState | null>(null);
   const [composerDragOffset, setComposerDragOffset] = useState<{ x: number; y: number } | null>(null);
 
   const annotationColor = '#ff8a5b';
 
   const previewAnnotations = useMemo(() => clip.annotations, [clip.annotations]);
+  const selectedAnnotation = useMemo(
+    () => clip.annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null,
+    [clip.annotations, selectedAnnotationId],
+  );
+
+  useEffect(() => {
+    if (!clip.annotations.length) {
+      setSelectedAnnotationId(null);
+      return;
+    }
+
+    if (!selectedAnnotationId || !clip.annotations.some((annotation) => annotation.id === selectedAnnotationId)) {
+      setSelectedAnnotationId(clip.annotations.at(-1)?.id ?? null);
+    }
+  }, [clip.annotations, selectedAnnotationId]);
 
   function toPercentPoint(clientX: number, clientY: number, rect: DOMRect) {
     return {
@@ -242,25 +274,180 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
     setComposerDragOffset(null);
   }
 
-function saveTextComposer() {
+  function saveTextComposer() {
     if (!textComposer?.text.trim()) {
       closeTextComposer();
       return;
     }
 
+    const nextAnnotation: ClipAnnotation = {
+      id: `annotation_${Date.now()}`,
+      kind: 'text',
+      color: annotationColor,
+      text: textComposer.text.trim(),
+      x: textComposer.x,
+      y: textComposer.y,
+    };
+
     onChange([
       ...clip.annotations,
-      {
-        id: `annotation_${Date.now()}`,
-        kind: 'text',
-        color: annotationColor,
-        text: textComposer.text.trim(),
-        x: textComposer.x,
-        y: textComposer.y,
-      },
+      nextAnnotation,
     ]);
-    setActiveTool('box');
+    setSelectedAnnotationId(nextAnnotation.id);
     closeTextComposer();
+  }
+
+  function cycleSelectedAnnotation(direction: -1 | 1) {
+    if (!clip.annotations.length) {
+      setSelectedAnnotationId(null);
+      return;
+    }
+
+    const currentIndex = clip.annotations.findIndex((annotation) => annotation.id === selectedAnnotationId);
+    const fallbackIndex = direction === 1 ? 0 : clip.annotations.length - 1;
+    const nextIndex =
+      currentIndex === -1
+        ? fallbackIndex
+        : (currentIndex + direction + clip.annotations.length) % clip.annotations.length;
+
+    setSelectedAnnotationId(clip.annotations[nextIndex]?.id ?? null);
+  }
+
+  function updateSelectedAnnotation(mutate: (annotation: ClipAnnotation) => ClipAnnotation) {
+    if (!selectedAnnotationId) {
+      return;
+    }
+
+    onChange(
+      clip.annotations.map((annotation) =>
+        annotation.id === selectedAnnotationId ? mutate(annotation) : annotation,
+      ),
+    );
+  }
+
+  function nudgeSelectedAnnotation(deltaX: number, deltaY: number, resize = false) {
+    updateSelectedAnnotation((annotation) => {
+      if (!resize) {
+        return translateAnnotation(annotation, deltaX, deltaY);
+      }
+
+      if (annotation.kind === 'box') {
+        return {
+          ...annotation,
+          width: clamp(annotation.width + deltaX, 1, 100 - annotation.x),
+          height: clamp(annotation.height + deltaY, 1, 100 - annotation.y),
+        };
+      }
+
+      if (annotation.kind === 'arrow') {
+        return {
+          ...annotation,
+          endX: clamp(annotation.endX + deltaX, 0, 100),
+          endY: clamp(annotation.endY + deltaY, 0, 100),
+        };
+      }
+
+      return annotation;
+    });
+  }
+
+  function removeSelectedAnnotation() {
+    if (!selectedAnnotationId) {
+      return;
+    }
+
+    const selectedIndex = clip.annotations.findIndex((annotation) => annotation.id === selectedAnnotationId);
+    const remainingAnnotations = clip.annotations.filter((annotation) => annotation.id !== selectedAnnotationId);
+    onChange(remainingAnnotations);
+    setSelectedAnnotationId(
+      remainingAnnotations[Math.min(selectedIndex, remainingAnnotations.length - 1)]?.id ?? null,
+    );
+  }
+
+  function handleStageKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === '[') {
+      event.preventDefault();
+      cycleSelectedAnnotation(-1);
+      return;
+    }
+
+    if (event.key === ']') {
+      event.preventDefault();
+      cycleSelectedAnnotation(1);
+      return;
+    }
+
+    if ((event.key === 'Backspace' || event.key === 'Delete') && clip.annotations.length > 0) {
+      event.preventDefault();
+      if (selectedAnnotationId) {
+        removeSelectedAnnotation();
+        return;
+      }
+
+      onChange(clip.annotations.slice(0, -1));
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setStartPoint(null);
+      setDraftShape(null);
+      setMovingAnnotation(null);
+      closeTextComposer();
+      return;
+    }
+
+    if (textComposer) {
+      return;
+    }
+
+    if (event.key === 't' || event.key === 'T') {
+      event.preventDefault();
+      setActiveTool('text');
+      return;
+    }
+
+    if (event.key === 'b' || event.key === 'B') {
+      event.preventDefault();
+      setActiveTool('box');
+      return;
+    }
+
+    if (event.key === 'a' || event.key === 'A') {
+      event.preventDefault();
+      setActiveTool('arrow');
+      return;
+    }
+
+    if (!selectedAnnotation) {
+      return;
+    }
+
+    const delta = event.shiftKey ? 1.5 : 1;
+    const resize = event.shiftKey;
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      nudgeSelectedAnnotation(-delta, 0, resize);
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      nudgeSelectedAnnotation(delta, 0, resize);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      nudgeSelectedAnnotation(0, -delta, resize);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      nudgeSelectedAnnotation(0, delta, resize);
+    }
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -282,6 +469,7 @@ function saveTextComposer() {
     const hitAnnotation = hitTestAnnotation(clip.annotations, point);
     if (hitAnnotation) {
       event.currentTarget.setPointerCapture(event.pointerId);
+      setSelectedAnnotationId(hitAnnotation.annotation.id);
       setMovingAnnotation({
         id: hitAnnotation.annotation.id,
         mode: hitAnnotation.mode,
@@ -296,6 +484,7 @@ function saveTextComposer() {
     if (activeTool === 'text') {
       setStartPoint(null);
       setDraftShape(null);
+      setSelectedAnnotationId(null);
       openTextComposer(event.clientX, event.clientY, rect);
       return;
     }
@@ -407,15 +596,14 @@ function saveTextComposer() {
         return;
       }
 
-      onChange([
-        ...clip.annotations,
-        {
-          id: `annotation_${Date.now()}`,
-          kind: 'box',
-          color: annotationColor,
-          ...nextRect,
-        },
-      ]);
+      const nextAnnotation: ClipAnnotation = {
+        id: `annotation_${Date.now()}`,
+        kind: 'box',
+        color: annotationColor,
+        ...nextRect,
+      };
+      onChange([...clip.annotations, nextAnnotation]);
+      setSelectedAnnotationId(nextAnnotation.id);
       return;
     }
 
@@ -432,23 +620,22 @@ function saveTextComposer() {
       return;
     }
 
-    onChange([
-      ...clip.annotations,
-      {
-        id: `annotation_${Date.now()}`,
-        kind: 'arrow',
-        color: annotationColor,
-        startX: start.x,
-        startY: start.y,
-        endX: end.x,
-        endY: end.y,
-      },
-    ]);
+    const nextAnnotation: ClipAnnotation = {
+      id: `annotation_${Date.now()}`,
+      kind: 'arrow',
+      color: annotationColor,
+      startX: start.x,
+      startY: start.y,
+      endX: end.x,
+      endY: end.y,
+    };
+    onChange([...clip.annotations, nextAnnotation]);
+    setSelectedAnnotationId(nextAnnotation.id);
   }
 
   return (
     <section className="annotation-shell">
-      <div className="annotation-toolbar">
+      <div aria-label="Annotation tools" className="annotation-toolbar" role="toolbar">
         <ToolButton isActive={activeTool === 'text'} label="Text" onClick={() => setActiveTool('text')} />
         <ToolButton isActive={activeTool === 'box'} label="Box" onClick={() => setActiveTool('box')} />
         <ToolButton isActive={activeTool === 'arrow'} label="Arrow" onClick={() => setActiveTool('arrow')} />
@@ -459,13 +646,40 @@ function saveTextComposer() {
         />
       </div>
 
+      {clip.annotations.length ? (
+        <div className="annotation-selection-bar">
+          <div className="annotation-selection-copy">
+            <span className="annotation-selection-label">Selected</span>
+            <strong>
+              {selectedAnnotation
+                ? `${selectedAnnotation.kind} ${clip.annotations.findIndex((annotation) => annotation.id === selectedAnnotation.id) + 1}`
+                : 'No annotation selected'}
+            </strong>
+          </div>
+          <div className="annotation-selection-actions">
+            <button className="secondary" onClick={() => cycleSelectedAnnotation(-1)} type="button">
+              Previous
+            </button>
+            <button className="secondary" onClick={() => cycleSelectedAnnotation(1)} type="button">
+              Next
+            </button>
+            <button className="secondary" disabled={!selectedAnnotation} onClick={removeSelectedAnnotation} type="button">
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div
+        aria-label="Annotation canvas. Press T for text, B for box, A for arrow, brackets to change selection, arrow keys to move the selected annotation, Shift plus arrow keys to resize it, Delete to remove it, and Escape to cancel."
         className="annotation-stage annotation-stage-drawing"
+        onKeyDown={handleStageKeyDown}
         onPointerCancel={finishPointer}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointer}
         ref={containerRef}
+        tabIndex={0}
       >
         {imageUrl ? (
           <img alt={clip.title} className="annotation-image" src={imageUrl} />
@@ -520,6 +734,7 @@ function saveTextComposer() {
             >
               <span>Text annotation</span>
               <button
+                aria-label="Close text annotation composer"
                 className="annotation-text-composer-close"
                 onClick={closeTextComposer}
                 type="button"
@@ -528,6 +743,7 @@ function saveTextComposer() {
               </button>
             </div>
             <textarea
+              autoFocus
               className="annotation-text-composer-input"
               onChange={(event) =>
                 setTextComposer((currentValue) =>
@@ -568,6 +784,8 @@ function saveTextComposer() {
 
         <svg className="annotation-overlay" preserveAspectRatio="none" viewBox="0 0 100 100">
           {previewAnnotations.map((annotation) => {
+            const isSelected = annotation.id === selectedAnnotationId;
+
             if (annotation.kind === 'box') {
               return (
                 <g key={annotation.id}>
@@ -582,6 +800,28 @@ function saveTextComposer() {
                     x={annotation.x}
                     y={annotation.y}
                   />
+                  {isSelected ? (
+                    <>
+                      <rect
+                        fill="none"
+                        height={annotation.height}
+                        rx="1.8"
+                        ry="1.8"
+                        stroke="#70c8ff"
+                        strokeDasharray="1.6 1.1"
+                        strokeWidth="0.32"
+                        width={annotation.width}
+                        x={annotation.x}
+                        y={annotation.y}
+                      />
+                      <circle
+                        cx={annotation.x + annotation.width}
+                        cy={annotation.y + annotation.height}
+                        fill="#70c8ff"
+                        r="0.9"
+                      />
+                    </>
+                  ) : null}
                 </g>
               );
             }
@@ -611,13 +851,29 @@ function saveTextComposer() {
                       <path d="M0,0 L6,3 L0,6 z" fill={annotation.color} />
                     </marker>
                   </defs>
+                  {isSelected ? (
+                    <>
+                      <circle cx={annotation.startX} cy={annotation.startY} fill="#70c8ff" r="0.9" />
+                      <circle cx={annotation.endX} cy={annotation.endY} fill="#70c8ff" r="0.9" />
+                    </>
+                  ) : null}
                 </g>
               );
             }
 
+            const textSize = getTextAnnotationSize(annotation.text);
+
             return (
-              <foreignObject height="20" key={annotation.id} width="60" x={annotation.x} y={annotation.y - 6}>
-                <div className="annotation-text-tag">{annotation.text}</div>
+              <foreignObject
+                height={textSize.height}
+                key={annotation.id}
+                width={textSize.width}
+                x={annotation.x}
+                y={annotation.y - 6}
+              >
+                <div className={`annotation-text-tag ${isSelected ? 'annotation-text-tag-selected' : ''}`}>
+                  {annotation.text}
+                </div>
               </foreignObject>
             );
           })}
