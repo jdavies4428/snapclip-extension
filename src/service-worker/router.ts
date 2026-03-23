@@ -3,7 +3,7 @@ import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { cancelClipOverlay, startClipWorkflow } from './clipping';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
-import { getClipSession, updateClipAnnotations, updateClipNote, updateClipTitle } from './storage';
+import { getClipSession, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
 
 async function openSidePanelForActiveWindow(): Promise<void> {
   const tab = await getActiveTab();
@@ -44,8 +44,8 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
       }
     }
     case 'commit-clip': {
-      const session = await commitClipToSession(message);
-      return { ok: true, session };
+      await commitClipToSession(message);
+      return { ok: true };
     }
     case 'cancel-clip-overlay': {
       await cancelClipOverlay(message.tabId);
@@ -65,6 +65,10 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
     }
     case 'update-clip-annotations': {
       const session = await updateClipAnnotations(message.clipId, message.annotations);
+      return { ok: true, session };
+    }
+    case 'update-clip-handoff': {
+      const session = await updateClipHandoff(message.clipId, message.handoff);
       return { ok: true, session };
     }
     case 'export-clip-session': {

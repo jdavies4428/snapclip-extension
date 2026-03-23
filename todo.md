@@ -153,16 +153,19 @@ Already present:
 - blob-backed image storage
 - copy image / copy instructions / copy packet summary
 - deterministic bundle assembly
-- bridge-backed handoff scaffolding
+- localhost bridge service with task polling, approvals, and Claude hook endpoints
+- bridge-backed current-clip and session handoff flows
 - bounded runtime context collection
+- persisted per-clip handoff status after delivery or bundle creation
 
 Not yet locked down:
 - editor hierarchy and visual polish
 - side-panel information density
-- send-current-clip workflow from the modal
 - repeatable QA gates for the capture/editor/handoff loop
 - storage lifecycle and session management beyond the happy path
 - explicit deep-debug product decision
+- approval UX inside the extension when Claude hooks ask to continue
+- live Claude smoke coverage beyond local build/test verification
 
 ## Planning Conclusions
 

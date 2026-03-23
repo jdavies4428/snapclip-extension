@@ -1,4 +1,4 @@
-import type { ClipAnnotation, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
+import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
 import type { PageContext } from '../types/snapshot';
 
 export type OpenSidePanelMessage = {
@@ -48,6 +48,12 @@ export type UpdateClipAnnotationsMessage = {
   annotations: ClipAnnotation[];
 };
 
+export type UpdateClipHandoffMessage = {
+  type: 'update-clip-handoff';
+  clipId: string;
+  handoff: ClipHandoffRecord;
+};
+
 export type ExportClipSessionMessage = {
   type: 'export-clip-session';
   format: 'json' | 'markdown';
@@ -82,6 +88,7 @@ export type SnapClipMessage =
   | UpdateClipTitleMessage
   | UpdateClipNoteMessage
   | UpdateClipAnnotationsMessage
+  | UpdateClipHandoffMessage
   | ExportClipSessionMessage
   | OffscreenCopyTextMessage
   | OffscreenCopyImageMessage

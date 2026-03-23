@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bridge:dev": "node --watch bridge/index.js",
+    "bridge:start": "node bridge/index.js",
+    "bridge:install-hooks": "node bridge/install-hooks.js",
+    "bridge:test": "node --test bridge/test/hooks.test.js bridge/test/server.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -23,4 +27,3 @@
     "vite": "^5.4.10"
   }
 }
-

@@ -165,6 +165,20 @@ export const chromeDebuggerContextSchema = z.object({
   network: z.array(chromeDebuggerNetworkRequestSchema),
 });
 
+export const clipHandoffRecordSchema = z.object({
+  taskId: z.string(),
+  target: z.enum(['claude', 'codex', 'export_only']),
+  deliveryState: z.enum(['queued', 'delivering', 'bundle_created', 'delivered', 'failed_after_bundle_creation']),
+  deliveryTarget: z.enum(['bundle_only', 'claude_session', 'codex_bundle']),
+  workspaceId: z.string(),
+  workspaceName: z.string(),
+  sessionId: z.string().nullable(),
+  sessionLabel: z.string().nullable(),
+  bundlePath: z.string(),
+  error: z.string().nullable(),
+  updatedAt: z.string(),
+});
+
 export const runtimeContextSchema = z.object({
   summary: runtimeSummarySchema,
   events: z.array(runtimeEventSchema),
@@ -203,6 +217,7 @@ export const clipRecordSchema = z.object({
   runtimeContext: runtimeContextSchema.nullable(),
   note: z.string(),
   annotations: z.array(clipAnnotationSchema),
+  lastHandoff: clipHandoffRecordSchema.nullable().optional(),
 });
 
 export const clipSessionSchema = z.object({
@@ -231,6 +246,7 @@ export type ChromeDebuggerLogEntry = z.infer<typeof chromeDebuggerLogEntrySchema
 export type ChromeDebuggerNetworkRequest = z.infer<typeof chromeDebuggerNetworkRequestSchema>;
 export type ChromeDebuggerFrame = z.infer<typeof chromeDebuggerFrameSchema>;
 export type ChromeDebuggerContext = z.infer<typeof chromeDebuggerContextSchema>;
+export type ClipHandoffRecord = z.infer<typeof clipHandoffRecordSchema>;
 export type RuntimeContext = z.infer<typeof runtimeContextSchema>;
 export type ClipRecord = z.infer<typeof clipRecordSchema>;
 export type ClipSession = z.infer<typeof clipSessionSchema>;

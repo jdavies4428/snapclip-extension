@@ -288,16 +288,27 @@ function mountClipOverlay(
       });
   };
 
-  const getNextClipTitle = async () => {
-    const response = await chrome.runtime.sendMessage({
-      type: 'get-clip-session',
-    });
-
-    if (response?.ok && response.session) {
-      return `Clip ${response.session.clips.length + 1}`;
+  const buildAutomaticClipTitle = (pageUrl: string, capturedAt = new Date()) => {
+    let host = 'clip';
+    try {
+      host = new URL(pageUrl).hostname.replace(/^www\./, '') || 'clip';
+    } catch {
+      // Fall back to a generic title if the URL cannot be parsed.
     }
 
-    return 'Clip 1';
+    const dateParts = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(capturedAt);
+
+    const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+      dateParts.find((entry) => entry.type === type)?.value ?? '00';
+
+    return `${host}_${getPart('year')}-${getPart('month')}-${getPart('day')}_${getPart('hour')}-${getPart('minute')}`;
   };
 
   const normalizeRect = (
@@ -319,7 +330,7 @@ function mountClipOverlay(
   root.style.position = 'fixed';
   root.style.inset = '0';
   root.style.zIndex = '2147483646';
-  root.style.cursor = clipMode === 'region' ? 'crosshair' : 'default';
+  root.style.cursor = clipMode === 'region' ? 'none' : 'default';
   root.style.background = 'transparent';
 
   const topMask = document.createElement('div');
@@ -403,6 +414,74 @@ function mountClipOverlay(
       ? 'Saving the visible tab...'
       : 'Drag to select. Release to capture. Press Esc to cancel.';
   root.append(hint);
+
+  const cursorBubble = document.createElement('div');
+  cursorBubble.style.position = 'fixed';
+  cursorBubble.style.left = '0';
+  cursorBubble.style.top = '0';
+  cursorBubble.style.display = 'none';
+  cursorBubble.style.alignItems = 'center';
+  cursorBubble.style.gap = '8px';
+  cursorBubble.style.fontFamily = '"Avenir Next", "SF Pro Display", "Segoe UI", sans-serif';
+  cursorBubble.style.fontSize = '12px';
+  cursorBubble.style.fontWeight = '700';
+  cursorBubble.style.letterSpacing = '0.04em';
+  cursorBubble.style.pointerEvents = 'none';
+  cursorBubble.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  cursorBubble.style.zIndex = '2147483647';
+
+  const cursorDot = document.createElement('div');
+  cursorDot.style.width = '22px';
+  cursorDot.style.height = '22px';
+  cursorDot.style.display = 'grid';
+  cursorDot.style.placeItems = 'center';
+  cursorDot.style.flex = '0 0 auto';
+  cursorDot.style.filter = 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.38))';
+  cursorDot.innerHTML = `
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M4.5 3.5L16.8 11.1L11.1 12.4L13.4 18.5L10.8 19.5L8.5 13.5L4.5 17.4V3.5Z" fill="#F4FAFF"/>
+      <path d="M4.5 3.5L16.8 11.1L11.1 12.4L13.4 18.5L10.8 19.5L8.5 13.5L4.5 17.4V3.5Z" stroke="#0A1627" stroke-width="1.35" stroke-linejoin="round"/>
+      <path d="M4.5 3.5L16.8 11.1L11.1 12.4" stroke="#66C7FF" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+
+  const cursorText = document.createElement('div');
+  cursorText.textContent = '';
+  cursorText.style.whiteSpace = 'nowrap';
+  cursorText.style.display = 'none';
+  cursorText.style.padding = '6px 10px';
+  cursorText.style.borderRadius = '999px';
+  cursorText.style.background = 'rgba(9, 14, 24, 0.9)';
+  cursorText.style.border = '1px solid rgba(115, 187, 255, 0.24)';
+  cursorText.style.boxShadow = '0 14px 36px rgba(0, 0, 0, 0.28)';
+  cursorText.style.color = '#eef4fb';
+
+  cursorBubble.append(cursorDot, cursorText);
+  root.append(cursorBubble);
+
+  const moveCursorBubble = (clientX: number, clientY: number) => {
+    const offsetX = 10;
+    const offsetY = 8;
+    const maxX = Math.max(16, window.innerWidth - 220);
+    const maxY = Math.max(16, window.innerHeight - 72);
+    const nextX = clamp(clientX + offsetX, 16, maxX);
+    const nextY = clamp(clientY + offsetY, 16, maxY);
+    cursorBubble.style.transform = `translate3d(${nextX}px, ${nextY}px, 0)`;
+  };
+
+  const showCursorBubble = (label: string, clientX?: number, clientY?: number) => {
+    cursorText.textContent = label;
+    cursorText.style.display = label ? 'inline-flex' : 'none';
+    cursorBubble.style.display = 'inline-flex';
+    if (typeof clientX === 'number' && typeof clientY === 'number') {
+      moveCursorBubble(clientX, clientY);
+    }
+  };
+
+  const hideCursorBubble = () => {
+    cursorBubble.style.display = 'none';
+    cursorBubble.style.transform = 'translate3d(-9999px, -9999px, 0)';
+  };
 
   const setHintTone = (tone: 'default' | 'success' | 'error') => {
     if (tone === 'success') {
@@ -496,6 +575,19 @@ function mountClipOverlay(
   };
 
   if (clipMode === 'region') {
+    root.addEventListener('mouseenter', (event) => {
+      if (phase !== 'select') {
+        return;
+      }
+      showCursorBubble('', event.clientX, event.clientY);
+    });
+
+    root.addEventListener('mouseleave', () => {
+      if (phase === 'select') {
+        hideCursorBubble();
+      }
+    });
+
     root.addEventListener('mousedown', (event) => {
       if (phase !== 'select') {
         return;
@@ -521,17 +613,23 @@ function mountClipOverlay(
       if (phase !== 'select') {
         return;
       }
+
+      moveCursorBubble(event.clientX, event.clientY);
+
       if (!dragStart) {
+        showCursorBubble('', event.clientX, event.clientY);
         return;
       }
 
+      const nextRect = normalizeRect(
+        dragStart.x,
+        dragStart.y,
+        clamp(event.clientX, 0, window.innerWidth),
+        clamp(event.clientY, 0, window.innerHeight),
+      );
+      showCursorBubble(`${nextRect.width} x ${nextRect.height}`, event.clientX, event.clientY);
       updateSelection(
-        normalizeRect(
-          dragStart.x,
-          dragStart.y,
-          clamp(event.clientX, 0, window.innerWidth),
-          clamp(event.clientY, 0, window.innerHeight),
-        ),
+        nextRect,
       );
     });
 
@@ -592,18 +690,18 @@ function mountClipOverlay(
       await image.decode();
 
       root.replaceChildren();
-      root.append(hint);
-      announce('Name the clip, annotate if you want, then copy or save it.');
+      root.style.cursor = 'default';
+      hideCursorBubble();
 
       const editor = document.createElement('div');
       editor.style.position = 'fixed';
       editor.style.left = '50%';
       editor.style.top = '50%';
       editor.style.transform = 'translate(-50%, -50%)';
-      editor.style.width = '85vw';
-      editor.style.height = '86vh';
-      editor.style.maxWidth = '88vw';
-      editor.style.maxHeight = '86vh';
+      editor.style.width = 'min(92vw, 1500px)';
+      editor.style.height = '88vh';
+      editor.style.maxWidth = '92vw';
+      editor.style.maxHeight = '88vh';
       editor.style.overflow = 'hidden';
       editor.style.boxSizing = 'border-box';
       editor.style.padding = '20px';
@@ -655,7 +753,9 @@ function mountClipOverlay(
       closeButton.style.font = 'inherit';
       closeButton.style.fontWeight = '800';
       closeButton.style.cursor = 'pointer';
-      closeButton.style.position = 'relative';
+      closeButton.style.position = 'absolute';
+      closeButton.style.top = '18px';
+      closeButton.style.right = '18px';
       closeButton.style.zIndex = '2';
 
       const railHeader = document.createElement('div');
@@ -679,18 +779,7 @@ function mountClipOverlay(
       titleControls.style.alignItems = 'center';
       titleControls.style.gap = '10px';
 
-      const titleInput = document.createElement('input');
-      titleInput.type = 'text';
-      titleInput.value = await getNextClipTitle();
-      titleInput.placeholder = 'Clip name';
-      titleInput.style.border = '1px solid rgba(103, 209, 255, 0.24)';
-      titleInput.style.borderRadius = '14px';
-      titleInput.style.padding = '12px 14px';
-      titleInput.style.background = 'rgba(255,255,255,0.05)';
-      titleInput.style.color = '#eef4fb';
-      titleInput.style.font = 'inherit';
-      titleInput.style.fontSize = '22px';
-      titleInput.style.fontWeight = '700';
+      const clipTitle = buildAutomaticClipTitle(pageContext.url);
 
       const titleSub = document.createElement('p');
       titleSub.textContent = pageContext.title || 'Captured clip';
@@ -701,17 +790,12 @@ function mountClipOverlay(
 
       titleControls.append(titleHint, closeButton);
       titleTopRow.append(titleEyebrow, titleControls);
-      railHeader.append(titleTopRow, titleInput, titleSub);
+      railHeader.append(titleTopRow, titleSub);
 
       const noteCard = document.createElement('div');
       noteCard.style.display = 'grid';
-      noteCard.style.gap = '8px';
-      noteCard.style.padding = '14px';
-      noteCard.style.borderRadius = '18px';
-      noteCard.style.border = '1px solid rgba(157, 177, 207, 0.16)';
-      noteCard.style.background = 'rgba(255, 255, 255, 0.05)';
+      noteCard.style.gap = '10px';
       noteCard.style.minHeight = '0';
-      noteCard.style.overflow = 'hidden';
 
       const noteLabel = document.createElement('div');
       noteLabel.textContent = 'Agent prompt';
@@ -722,16 +806,17 @@ function mountClipOverlay(
       noteLabel.style.textTransform = 'uppercase';
 
       const noteHelp = document.createElement('p');
-      noteHelp.textContent = 'Describe the bug, what matters in this crop, and what you want the model to do next.';
+      noteHelp.textContent = 'Say what looks wrong and what you want the model to do next.';
       noteHelp.style.margin = '0';
       noteHelp.style.color = '#b7c4da';
       noteHelp.style.fontSize = '13px';
       noteHelp.style.lineHeight = '1.45';
 
       const noteField = document.createElement('textarea');
-      noteField.placeholder = 'Enter prompt for the LLM...';
+      noteField.placeholder = 'What looks wrong? What should the model do next?';
       noteField.style.width = '100%';
-      noteField.style.minHeight = '112px';
+      noteField.style.minHeight = '0';
+      noteField.style.height = '100%';
       noteField.style.boxSizing = 'border-box';
       noteField.style.resize = 'none';
       noteField.style.borderRadius = '16px';
@@ -744,7 +829,7 @@ function mountClipOverlay(
       noteField.style.lineHeight = '1.5';
       noteField.style.display = 'block';
       noteField.setAttribute('aria-label', 'Clip instructions');
-      noteCard.append(noteLabel, noteHelp, noteField);
+      noteCard.append(noteField);
 
       const actionRow = document.createElement('div');
       actionRow.style.display = 'grid';
@@ -767,7 +852,7 @@ function mountClipOverlay(
 
       const toolRow = document.createElement('div');
       toolRow.style.display = 'grid';
-      toolRow.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+      toolRow.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
       toolRow.style.gap = '8px';
 
       const toolTextButton = document.createElement('button');
@@ -896,7 +981,7 @@ function mountClipOverlay(
 
       const copyRow = document.createElement('div');
       copyRow.style.display = 'grid';
-      copyRow.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+      copyRow.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
       copyRow.style.gap = '8px';
 
       const saveRow = document.createElement('div');
@@ -906,72 +991,22 @@ function mountClipOverlay(
 
       const utilityRow = document.createElement('div');
       utilityRow.style.display = 'grid';
-      utilityRow.style.gridTemplateColumns = 'minmax(0, 1fr)';
+      utilityRow.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
       utilityRow.style.gap = '8px';
 
-      const toolbarCard = document.createElement('div');
-      toolbarCard.style.display = 'grid';
-      toolbarCard.style.gap = '10px';
-      toolbarCard.style.padding = '14px';
-      toolbarCard.style.borderRadius = '18px';
-      toolbarCard.style.border = '1px solid rgba(157, 177, 207, 0.16)';
-      toolbarCard.style.background = 'rgba(255, 255, 255, 0.04)';
-
-      const toolbarTitle = document.createElement('div');
-      toolbarTitle.textContent = 'Annotate';
-      toolbarTitle.style.color = '#88d5ff';
-      toolbarTitle.style.fontSize = '12px';
-      toolbarTitle.style.fontWeight = '700';
-      toolbarTitle.style.letterSpacing = '0.08em';
-      toolbarTitle.style.textTransform = 'uppercase';
-
-      const toolbarHelp = document.createElement('p');
-      toolbarHelp.textContent = 'Create with Text, Box, or Arrow. Click any existing annotation to move it. Double-click text to edit it.';
-      toolbarHelp.style.margin = '0';
-      toolbarHelp.style.color = '#b7c4da';
-      toolbarHelp.style.fontSize = '13px';
-      toolbarHelp.style.lineHeight = '1.45';
-
       const selectionHint = document.createElement('div');
-      selectionHint.style.display = 'none';
-      selectionHint.style.padding = '9px 11px';
-      selectionHint.style.borderRadius = '12px';
-      selectionHint.style.background = 'rgba(255,255,255,0.05)';
-      selectionHint.style.color = '#dbe8f8';
+      selectionHint.style.display = 'block';
+      selectionHint.style.minHeight = '34px';
+      selectionHint.style.padding = '6px 2px 0';
+      selectionHint.style.color = '#9db2cf';
       selectionHint.style.fontSize = '12px';
-      selectionHint.style.fontWeight = '700';
-      selectionHint.style.lineHeight = '1.4';
-
-      toolbarCard.append(toolbarTitle, toolbarHelp, selectionHint, toolRow);
-
-      const actionsCard = document.createElement('div');
-      actionsCard.style.display = 'grid';
-      actionsCard.style.gap = '10px';
-      actionsCard.style.padding = '14px';
-      actionsCard.style.borderRadius = '18px';
-      actionsCard.style.border = '1px solid rgba(157, 177, 207, 0.16)';
-      actionsCard.style.background = 'rgba(255, 255, 255, 0.04)';
-
-      const actionsTitle = document.createElement('div');
-      actionsTitle.textContent = 'Clip actions';
-      actionsTitle.style.color = '#88d5ff';
-      actionsTitle.style.fontSize = '12px';
-      actionsTitle.style.fontWeight = '700';
-      actionsTitle.style.letterSpacing = '0.08em';
-      actionsTitle.style.textTransform = 'uppercase';
-
-      const actionsHelp = document.createElement('p');
-      actionsHelp.textContent = 'Save the clip into the session, or copy exactly the artifact you need for the handoff.';
-      actionsHelp.style.margin = '0';
-      actionsHelp.style.color = '#b7c4da';
-      actionsHelp.style.fontSize = '13px';
-      actionsHelp.style.lineHeight = '1.45';
-
-      copyRow.append(copyButton, copyInstructionsButton, copySummaryButton);
+      selectionHint.style.fontWeight = '600';
+      selectionHint.style.lineHeight = '1.45';
+      toolRow.append(toolTextButton, toolBoxButton, toolArrowButton);
+      copyRow.append(copyButton, copySummaryButton);
       saveRow.append(saveButton, cancelButton);
-      utilityRow.append(detailsButton);
-      actionsCard.append(actionsTitle, actionsHelp, copyRow, saveRow, utilityRow);
-      actionRow.append(actionsCard, toolbarCard, actionStatus);
+      utilityRow.append(detailsButton, toolUndoButton);
+      actionRow.append(toolRow, selectionHint, saveRow, copyRow, utilityRow, actionStatus);
 
       const metaRow = document.createElement('div');
       metaRow.style.display = 'flex';
@@ -1002,7 +1037,7 @@ function mountClipOverlay(
 
       const contentGrid = document.createElement('div');
       contentGrid.style.display = 'grid';
-      contentGrid.style.gridTemplateColumns = 'minmax(0, 1fr) 352px';
+      contentGrid.style.gridTemplateColumns = 'minmax(0, 1fr) minmax(380px, 420px)';
       contentGrid.style.gap = '18px';
       contentGrid.style.minHeight = '0';
       contentGrid.style.height = '100%';
@@ -1014,23 +1049,31 @@ function mountClipOverlay(
       mainColumn.style.minHeight = '0';
 
       const sideRail = document.createElement('aside');
+      sideRail.dataset.snapclipScroll = 'hidden';
       sideRail.style.display = 'grid';
-      sideRail.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
-      sideRail.style.gap = '12px';
+      sideRail.style.gridTemplateRows = 'minmax(0, 1fr)';
       sideRail.style.minHeight = '0';
       sideRail.style.overflow = 'hidden';
+      sideRail.style.scrollbarWidth = 'none';
+      sideRail.style.setProperty('-ms-overflow-style', 'none');
 
       const composePanel = document.createElement('div');
       composePanel.style.display = 'grid';
-      composePanel.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
-      composePanel.style.gap = '12px';
+      composePanel.style.gridTemplateRows = 'minmax(0, 1fr) auto';
+      composePanel.style.gap = '10px';
       composePanel.style.minHeight = '0';
 
-      const detailsPanel = document.createElement('div');
-      detailsPanel.style.display = 'none';
-      detailsPanel.style.gridTemplateRows = 'auto minmax(0, 1fr)';
-      detailsPanel.style.gap = '12px';
-      detailsPanel.style.minHeight = '0';
+      const debugWorkspace = document.createElement('section');
+      debugWorkspace.dataset.snapclipScroll = 'hidden';
+      debugWorkspace.style.display = 'none';
+      debugWorkspace.style.gridAutoRows = 'max-content';
+      debugWorkspace.style.alignContent = 'start';
+      debugWorkspace.style.gap = '14px';
+      debugWorkspace.style.minHeight = '0';
+      debugWorkspace.style.overflowY = 'auto';
+      debugWorkspace.style.paddingRight = '4px';
+      debugWorkspace.style.scrollbarWidth = 'none';
+      debugWorkspace.style.setProperty('-ms-overflow-style', 'none');
 
       const detailsHead = document.createElement('div');
       detailsHead.style.display = 'flex';
@@ -1052,15 +1095,24 @@ function mountClipOverlay(
       detailsEyebrow.style.textTransform = 'uppercase';
 
       const detailsTitle = document.createElement('h3');
-      detailsTitle.textContent = 'Inspector';
+      detailsTitle.textContent = 'Readable debug report';
       detailsTitle.style.margin = '0';
-      detailsTitle.style.fontSize = '16px';
+      detailsTitle.style.fontSize = '22px';
       detailsTitle.style.color = '#eef4fb';
+
+      const detailsLead = document.createElement('p');
+      detailsLead.textContent =
+        'A calm summary of what this clip captured. Chrome does not show a separate per-clip approval here; richer Chrome data uses the extension debugger permission locally when available.';
+      detailsLead.style.margin = '0';
+      detailsLead.style.color = '#b7c4da';
+      detailsLead.style.fontSize = '14px';
+      detailsLead.style.lineHeight = '1.5';
 
       const detailsActions = document.createElement('div');
       detailsActions.style.display = 'flex';
       detailsActions.style.alignItems = 'center';
       detailsActions.style.gap = '8px';
+      detailsActions.style.flexWrap = 'wrap';
 
       const copyDebugButton = document.createElement('button');
       copyDebugButton.textContent = 'Copy report';
@@ -1084,7 +1136,7 @@ function mountClipOverlay(
       detailsBackButton.style.background = 'rgba(255,255,255,0.08)';
       detailsBackButton.style.color = '#edf3fb';
 
-      detailsTitleBlock.append(detailsEyebrow, detailsTitle);
+      detailsTitleBlock.append(detailsEyebrow, detailsTitle, detailsLead);
       detailsActions.append(copyDebugButton, detailsBackButton);
       detailsHead.append(detailsTitleBlock, detailsActions);
 
@@ -1094,7 +1146,7 @@ function mountClipOverlay(
       stage.style.overflow = 'hidden';
       stage.style.border = '1px solid rgba(157, 177, 207, 0.16)';
       stage.style.background = '#050811';
-      stage.style.cursor = 'crosshair';
+      stage.style.cursor = 'none';
       stage.style.minHeight = '0';
       stage.style.touchAction = 'none';
       stage.style.userSelect = 'none';
@@ -1103,7 +1155,7 @@ function mountClipOverlay(
 
       const stageImage = document.createElement('img');
       stageImage.src = clipDataUrl;
-      stageImage.alt = titleInput.value;
+      stageImage.alt = clipTitle;
       stageImage.style.display = 'block';
       stageImage.style.width = '100%';
       stageImage.style.height = '100%';
@@ -1118,22 +1170,37 @@ function mountClipOverlay(
       const chromeDebugger = runtimeContext?.chromeDebugger ?? null;
       const clipAreaLabel = `${Math.round(rect.width)} x ${Math.round(rect.height)} at ${Math.round(rect.x)}, ${Math.round(rect.y)}`;
       const viewportLabel = `${pageContext.viewport.width} x ${pageContext.viewport.height} @ ${pageContext.viewport.dpr}x`;
+      const friendlyDebuggerMessage = (() => {
+        const raw = chromeDebugger?.attachError;
+        if (!raw) {
+          return null;
+        }
+
+        const normalized = raw.toLowerCase();
+        if (normalized.includes('requested protocol version is not supported')) {
+          return 'Chrome did not allow the extra debugger snapshot for this page.';
+        }
+        if (normalized.includes('already attached')) {
+          return 'Chrome already has this tab open in another debugger session.';
+        }
+        if (normalized.includes('permission')) {
+          return 'Chrome blocked the extra debugger snapshot for this page.';
+        }
+
+        return raw;
+      })();
       const summaryLines = [
         runtimeSummary ? `${runtimeSummary.eventCount} runtime events seen` : 'No runtime monitor data',
         runtimeSummary ? `${runtimeSummary.errorCount} errors, ${runtimeSummary.warningCount} warnings` : 'No errors or warnings captured',
         runtimeSummary
           ? `${runtimeSummary.failedRequestCount} failed requests, ${runtimeSummary.slowRequestCount} slow requests`
           : 'No network diagnostics captured',
-        chromeDebugger?.attachError
-          ? `Chrome debugger snapshot unavailable: ${chromeDebugger.attachError}`
+        friendlyDebuggerMessage
+          ? `Extra Chrome data unavailable: ${friendlyDebuggerMessage}`
           : chromeDebugger
             ? `${chromeDebugger.frameCount} frames • ${chromeDebugger.performance.nodes ?? 0} nodes • ${chromeDebugger.logs.length} Chrome logs`
             : 'No Chrome debugger snapshot attached',
       ];
-
-      const recentList = document.createElement('div');
-      recentList.style.display = 'grid';
-      recentList.style.gap = '8px';
 
       const recentMessages = [
         ...(runtimeContext?.events
@@ -1146,31 +1213,9 @@ function mountClipOverlay(
           .map((entry) => `${entry.method} ${entry.status ?? 'ERR'} ${entry.url}`) ?? []),
       ].slice(0, 4);
 
-      if (recentMessages.length === 0) {
-        const empty = document.createElement('div');
-        empty.textContent = 'No immediate errors, warnings, or failed requests were captured.';
-        empty.style.color = '#b9c9e2';
-        empty.style.fontSize = '13px';
-        empty.style.lineHeight = '1.45';
-        recentList.append(empty);
-      } else {
-        recentMessages.forEach((message) => {
-          const item = document.createElement('div');
-          item.textContent = message;
-          item.style.padding = '10px 12px';
-          item.style.borderRadius = '12px';
-          item.style.background = 'rgba(255, 255, 255, 0.05)';
-          item.style.color = '#d8e3f2';
-          item.style.fontSize = '12px';
-          item.style.lineHeight = '1.45';
-          item.style.wordBreak = 'break-word';
-          recentList.append(item);
-        });
-      }
-
       const buildDebugReportText = () =>
         [
-          `# Debug report for ${titleInput.value || 'Clip'}`,
+          `# Debug report for ${clipTitle}`,
           '',
           noteField.value.trim() ? `Instructions:\n${noteField.value.trim()}` : '',
           '',
@@ -1408,11 +1453,8 @@ function mountClipOverlay(
         return empty;
       };
 
-      const detailShell = document.createElement('div');
-      detailShell.style.display = 'grid';
-      detailShell.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
-      detailShell.style.gap = '12px';
-      detailShell.style.minHeight = '0';
+      type InsightTone = 'default' | 'error' | 'warn';
+      type InsightRow = { label: string; value: string; tone?: InsightTone };
 
       const overviewStrip = document.createElement('div');
       overviewStrip.style.display = 'grid';
@@ -1426,58 +1468,230 @@ function mountClipOverlay(
         makeMetricPill('Slow', String(runtimeSummary?.slowRequestCount ?? 0), 'warn'),
       );
 
-      const detailTabs = document.createElement('div');
-      detailTabs.style.display = 'grid';
-      detailTabs.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
-      detailTabs.style.gap = '8px';
+      const makeInsightList = (items: InsightRow[], emptyText: string) => {
+        const list = document.createElement('div');
+        list.style.display = 'grid';
+        list.style.gap = '8px';
 
-      const detailBody = document.createElement('div');
-      detailBody.style.position = 'relative';
-      detailBody.style.minHeight = '0';
-      detailBody.style.overflow = 'hidden';
+        if (!items.length) {
+          list.append(makeEmptyInspectorMessage(emptyText));
+          return list;
+        }
 
-      const createPanel = () => {
-        const panel = document.createElement('div');
-        panel.style.display = 'none';
-        panel.style.height = '100%';
-        panel.style.overflowY = 'auto';
-        panel.style.paddingRight = '2px';
-        panel.style.scrollbarWidth = 'none';
-        panel.style.setProperty('-ms-overflow-style', 'none');
-        panel.style.display = 'grid';
-        panel.style.gap = '12px';
-        return panel;
+        items.forEach((entry) => {
+          const item = document.createElement('div');
+          item.style.display = 'grid';
+          item.style.gap = '6px';
+          item.style.padding = '12px';
+          item.style.borderRadius = '14px';
+          item.style.border =
+            entry.tone === 'error'
+              ? '1px solid rgba(255, 132, 95, 0.24)'
+              : entry.tone === 'warn'
+                ? '1px solid rgba(255, 196, 94, 0.24)'
+                : '1px solid rgba(157, 177, 207, 0.14)';
+          item.style.background =
+            entry.tone === 'error'
+              ? 'rgba(105, 31, 40, 0.18)'
+              : entry.tone === 'warn'
+                ? 'rgba(82, 61, 17, 0.18)'
+                : 'rgba(255, 255, 255, 0.035)';
+
+          const label = document.createElement('div');
+          label.textContent = entry.label;
+          label.style.color = '#9db2cf';
+          label.style.fontSize = '11px';
+          label.style.fontWeight = '700';
+          label.style.letterSpacing = '0.08em';
+          label.style.textTransform = 'uppercase';
+
+          const value = document.createElement('div');
+          value.textContent = entry.value;
+          value.style.color = '#eef4fb';
+          value.style.fontSize = '13px';
+          value.style.lineHeight = '1.5';
+          value.style.wordBreak = 'break-word';
+
+          item.append(label, value);
+          list.append(item);
+        });
+
+        return list;
       };
 
-      const overviewPanel = createPanel();
-      const consolePanel = createPanel();
-      const networkPanel = createPanel();
-      const domPanel = createPanel();
-      const systemPanel = createPanel();
+      const importantFindings: InsightRow[] = [];
+      if (runtimeSummary?.errorCount) {
+        importantFindings.push({
+          label: 'Runtime errors',
+          value: `${runtimeSummary.errorCount} error${runtimeSummary.errorCount === 1 ? '' : 's'} were captured while clipping this page.`,
+          tone: 'error',
+        });
+      }
+      if (runtimeSummary?.failedRequestCount) {
+        importantFindings.push({
+          label: 'Failed requests',
+          value: `${runtimeSummary.failedRequestCount} request${runtimeSummary.failedRequestCount === 1 ? '' : 's'} failed during capture.`,
+          tone: 'error',
+        });
+      }
+      if (runtimeSummary?.warningCount) {
+        importantFindings.push({
+          label: 'Warnings',
+          value: `${runtimeSummary.warningCount} warning${runtimeSummary.warningCount === 1 ? '' : 's'} showed up while clipping.`,
+          tone: 'warn',
+        });
+      }
+      if (runtimeSummary?.slowRequestCount) {
+        importantFindings.push({
+          label: 'Slow requests',
+          value: `${runtimeSummary.slowRequestCount} request${runtimeSummary.slowRequestCount === 1 ? '' : 's'} took longer than expected.`,
+          tone: 'warn',
+        });
+      }
+      recentMessages.slice(0, 2).forEach((message, index) => {
+        importantFindings.push({
+          label: index === 0 ? 'Latest signal' : 'Also captured',
+          value: message,
+          tone: message.startsWith('ERROR') || message.includes(' ERR ') ? 'error' : message.startsWith('WARN') ? 'warn' : 'default',
+        });
+      });
+      if (friendlyDebuggerMessage) {
+        importantFindings.push({
+          label: 'Extra Chrome data',
+          value: friendlyDebuggerMessage,
+          tone: 'warn',
+        });
+      }
 
-      const overviewSummaryCard = makeSectionCard(
-        'Captured summary',
-        runtimeSummary
-          ? `${runtimeSummary.eventCount} events • ${runtimeSummary.networkRequestCount} requests`
-          : 'No runtime monitor data captured',
+      const consoleHighlights: InsightRow[] = [
+        ...(runtimeContext?.events
+          .filter((entry) => entry.level !== 'log')
+          .slice(0, 5)
+          .map((entry) => ({
+            label: `${entry.level.toUpperCase()} • ${entry.type.replaceAll('_', ' ')}`,
+            value: entry.message,
+            tone: entry.level === 'error' ? ('error' as const) : ('warn' as const),
+          })) ?? []),
+        ...(chromeDebugger?.logs
+          .filter((entry) => entry.level === 'error' || entry.level === 'warning')
+          .slice(0, 3)
+          .map((entry) => ({
+            label: `Chrome ${entry.level}`,
+            value: entry.text,
+            tone: entry.level === 'error' ? ('error' as const) : ('warn' as const),
+          })) ?? []),
+      ].slice(0, 6);
+
+      const requestHighlights: InsightRow[] = [
+        ...(runtimeContext?.network
+          .filter((entry) => entry.classification !== 'ok')
+          .slice(0, 5)
+          .map((entry) => ({
+            label: `${entry.method} ${entry.status ?? 'ERR'} • ${entry.durationMs}ms`,
+            value: entry.url,
+            tone: entry.classification === 'failed' ? ('error' as const) : ('warn' as const),
+          })) ?? []),
+        ...(chromeDebugger?.network
+          .filter(
+            (entry) =>
+              entry.failedReason ||
+              entry.blockedReason ||
+              entry.status === null ||
+              (typeof entry.status === 'number' && entry.status >= 400),
+          )
+          .slice(0, 3)
+          .map((entry) => ({
+            label: `Chrome ${entry.method} ${typeof entry.status === 'number' ? entry.status : 'ERR'}`,
+            value: entry.url,
+            tone: 'error' as const,
+          })) ?? []),
+      ].slice(0, 6);
+
+      const domSummary = runtimeContext?.domSummary;
+
+      const debugTopGrid = document.createElement('div');
+      debugTopGrid.style.display = 'grid';
+      debugTopGrid.style.gridTemplateColumns = 'minmax(280px, 0.95fr) minmax(0, 1.15fr)';
+      debugTopGrid.style.gap = '14px';
+
+      const debugPreviewCard = makeSectionCard('Captured clip', 'The same image evidence that will travel with the report.');
+      const debugPreviewImage = document.createElement('img');
+      debugPreviewImage.src = clipDataUrl;
+      debugPreviewImage.alt = clipTitle;
+      debugPreviewImage.style.display = 'block';
+      debugPreviewImage.style.width = '100%';
+      debugPreviewImage.style.maxHeight = '320px';
+      debugPreviewImage.style.objectFit = 'contain';
+      debugPreviewImage.style.borderRadius = '16px';
+      debugPreviewImage.style.border = '1px solid rgba(157, 177, 207, 0.14)';
+      debugPreviewImage.style.background = '#050811';
+
+      const previewMeta = document.createElement('div');
+      previewMeta.style.display = 'grid';
+      previewMeta.style.gap = '10px';
+      previewMeta.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+      previewMeta.append(
+        makeKeyValueRow('Page', pageContext.title || 'Untitled page'),
+        makeKeyValueRow('Viewport', viewportLabel),
+        makeKeyValueRow('Clip area', clipAreaLabel),
+        makeKeyValueRow('Captured', clipMode === 'visible' ? 'Visible tab clip' : 'Area clip'),
       );
-      const overviewSummaryGrid = document.createElement('div');
-      overviewSummaryGrid.style.display = 'grid';
-      overviewSummaryGrid.style.gap = '8px';
+      debugPreviewCard.append(debugPreviewImage, previewMeta);
+
+      const promptSummaryCard = makeSectionCard('Agent prompt', 'This prompt stays attached to the clip.');
+      const promptSummaryBody = document.createElement('div');
+      promptSummaryBody.textContent =
+        noteField.value.trim() || 'No prompt yet. Add one when you go back to the editor.';
+      promptSummaryBody.style.padding = '14px';
+      promptSummaryBody.style.borderRadius = '16px';
+      promptSummaryBody.style.border = '1px solid rgba(103, 209, 255, 0.18)';
+      promptSummaryBody.style.background = 'rgba(255, 255, 255, 0.035)';
+      promptSummaryBody.style.color = noteField.value.trim() ? '#eef4fb' : '#9db2cf';
+      promptSummaryBody.style.fontSize = '14px';
+      promptSummaryBody.style.lineHeight = '1.6';
+      promptSummaryBody.style.whiteSpace = 'pre-wrap';
+
+      const promptSummaryMeta = document.createElement('div');
+      promptSummaryMeta.style.display = 'grid';
+      promptSummaryMeta.style.gap = '8px';
       summaryLines.forEach((line) => {
         const item = document.createElement('div');
         item.textContent = line;
         item.style.color = '#d8e3f2';
         item.style.fontSize = '13px';
         item.style.lineHeight = '1.45';
-        overviewSummaryGrid.append(item);
+        promptSummaryMeta.append(item);
       });
-      overviewSummaryCard.append(overviewSummaryGrid);
 
-      const selectedTextCard = makeSectionCard(
-        'Selected text',
-        pageContext.domSummary.selectedText ? 'Captured from the page during clipping.' : 'No selection was captured.',
+      promptSummaryCard.append(promptSummaryBody, promptSummaryMeta);
+      debugTopGrid.append(debugPreviewCard, promptSummaryCard);
+
+      const importantCard = makeSectionCard(
+        'What matters first',
+        importantFindings.length
+          ? 'Only the most important signals are shown first.'
+          : 'Nothing obvious failed during capture.',
       );
+      importantCard.append(
+        makeInsightList(
+          importantFindings,
+          'No obvious runtime failures were captured. If this is a visual or interaction bug, the screenshot and your prompt are still the main evidence.',
+        ),
+      );
+
+      const consoleCard = makeSectionCard(
+        'Runtime signals',
+        consoleHighlights.length ? 'Errors and warnings captured while clipping.' : 'No console issues were captured.',
+      );
+      consoleCard.append(makeInsightList(consoleHighlights, 'No runtime errors or warnings were captured for this clip.'));
+
+      const networkCard = makeSectionCard(
+        'Request signals',
+        requestHighlights.length ? 'Slow or failed requests worth checking first.' : 'No failing or slow requests were captured.',
+      );
+      networkCard.append(makeInsightList(requestHighlights, 'No failing or slow requests were captured for this clip.'));
+
+      const pageContextCard = makeSectionCard('Page context', 'Helpful page details without opening inspect.');
       const selectedTextBody = document.createElement('div');
       selectedTextBody.textContent = pageContext.domSummary.selectedText || 'No selected text was captured for this clip.';
       selectedTextBody.style.padding = '12px';
@@ -1491,358 +1705,60 @@ function mountClipOverlay(
       selectedTextBody.style.color = pageContext.domSummary.selectedText ? '#eef4fb' : '#9db2cf';
       selectedTextBody.style.fontSize = '13px';
       selectedTextBody.style.lineHeight = '1.55';
-      selectedTextCard.append(selectedTextBody);
 
-      const overviewIssuesCard = makeSectionCard(
-        'Recent issues',
-        recentMessages.length ? recentMessages[0] : 'No immediate errors or failed requests captured.',
+      const pageMeta = document.createElement('div');
+      pageMeta.style.display = 'grid';
+      pageMeta.style.gap = '10px';
+      pageMeta.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+      pageMeta.append(
+        makeKeyValueRow('URL', pageContext.url),
+        makeKeyValueRow('Path', domSummary?.path || `${window.location.pathname}${window.location.search}${window.location.hash}`),
       );
-      overviewIssuesCard.append(recentList);
-      overviewPanel.append(overviewSummaryCard, selectedTextCard, overviewIssuesCard);
 
-      if (chromeDebugger) {
-        const debuggerOverviewCard = makeSectionCard(
-          'Chrome debugger snapshot',
-          chromeDebugger.attachError
-            ? chromeDebugger.attachError
-            : `${chromeDebugger.frameCount} frames • ${formatCount(chromeDebugger.performance.nodes)} DOM nodes`,
-        );
+      const makeTagGroup = (label: string, items: string[], emptyText: string) => {
+        const group = document.createElement('div');
+        group.style.display = 'grid';
+        group.style.gap = '8px';
 
-        debuggerOverviewCard.append(
-          makeKeyValueRow('Captured at', new Date(chromeDebugger.capturedAt).toLocaleString()),
-          makeKeyValueRow('Current URL', chromeDebugger.currentUrl),
-          makeKeyValueRow('Layout viewport', `${chromeDebugger.layout.viewportWidth ?? 'n/a'} x ${chromeDebugger.layout.viewportHeight ?? 'n/a'}`),
-          makeKeyValueRow('Content size', `${chromeDebugger.layout.contentWidth ?? 'n/a'} x ${chromeDebugger.layout.contentHeight ?? 'n/a'}`),
-          makeKeyValueRow('DOM nodes', formatCount(chromeDebugger.performance.nodes)),
-          makeKeyValueRow('JS heap used', formatBytes(chromeDebugger.performance.jsHeapUsedSize)),
-        );
+        const heading = document.createElement('div');
+        heading.textContent = label;
+        heading.style.color = '#88a2c6';
+        heading.style.fontSize = '11px';
+        heading.style.fontWeight = '700';
+        heading.style.letterSpacing = '0.08em';
+        heading.style.textTransform = 'uppercase';
 
-        if (chromeDebugger.detachReason) {
-          debuggerOverviewCard.append(makeKeyValueRow('Detach reason', chromeDebugger.detachReason));
-        }
+        group.append(heading, makeTagList(items, emptyText));
+        return group;
+      };
 
-        overviewPanel.append(debuggerOverviewCard);
-      }
+      pageContextCard.append(
+        selectedTextBody,
+        pageMeta,
+        makeTagGroup('Headings', domSummary?.headingTexts || pageContext.domSummary.headings, 'No headings captured.'),
+        makeTagGroup('Buttons', domSummary?.buttonTexts || pageContext.domSummary.buttons, 'No buttons captured.'),
+        makeTagGroup('Fields', domSummary?.inputLabels || pageContext.domSummary.fields, 'No fields captured.'),
+      );
 
-      if (runtimeContext?.events.length) {
-        runtimeContext.events.forEach((entry) => {
-          const item = document.createElement('article');
-          item.style.display = 'grid';
-          item.style.gap = '8px';
-          item.style.padding = '12px';
-          item.style.borderRadius = '16px';
-          item.style.border =
-            entry.level === 'error'
-              ? '1px solid rgba(255, 132, 95, 0.24)'
-              : entry.level === 'warn'
-                ? '1px solid rgba(255, 196, 94, 0.24)'
-                : '1px solid rgba(157, 177, 207, 0.14)';
-          item.style.background =
-            entry.level === 'error'
-              ? 'rgba(105, 31, 40, 0.18)'
-              : entry.level === 'warn'
-                ? 'rgba(82, 61, 17, 0.18)'
-                : 'rgba(255, 255, 255, 0.035)';
+      const technicalDetails = document.createElement('details');
+      technicalDetails.style.display = 'grid';
+      technicalDetails.style.gap = '12px';
+      technicalDetails.style.padding = '14px';
+      technicalDetails.style.borderRadius = '18px';
+      technicalDetails.style.border = '1px solid rgba(157, 177, 207, 0.16)';
+      technicalDetails.style.background = 'rgba(255, 255, 255, 0.03)';
 
-          const head = document.createElement('div');
-          head.style.display = 'flex';
-          head.style.alignItems = 'center';
-          head.style.justifyContent = 'space-between';
-          head.style.gap = '10px';
-          head.style.flexWrap = 'wrap';
+      const technicalSummary = document.createElement('summary');
+      technicalSummary.textContent = 'More technical details';
+      technicalSummary.style.cursor = 'pointer';
+      technicalSummary.style.color = '#eef4fb';
+      technicalSummary.style.fontSize = '15px';
+      technicalSummary.style.fontWeight = '700';
+      technicalSummary.style.listStyle = 'none';
 
-          const badge = document.createElement('span');
-          badge.textContent = entry.type.replaceAll('_', ' ');
-          badge.style.display = 'inline-flex';
-          badge.style.alignItems = 'center';
-          badge.style.minHeight = '24px';
-          badge.style.padding = '0 10px';
-          badge.style.borderRadius = '999px';
-          badge.style.background = 'rgba(255,255,255,0.08)';
-          badge.style.fontSize = '11px';
-          badge.style.fontWeight = '800';
-          badge.style.letterSpacing = '0.06em';
-          badge.style.textTransform = 'uppercase';
-
-          const time = document.createElement('time');
-          time.textContent = new Date(entry.timestamp).toLocaleTimeString();
-          time.style.color = '#9db2cf';
-          time.style.fontSize = '12px';
-
-          const message = document.createElement('p');
-          message.textContent = entry.message;
-          message.style.margin = '0';
-          message.style.color = '#e7effb';
-          message.style.fontSize = '13px';
-          message.style.lineHeight = '1.5';
-
-          head.append(badge, time);
-          item.append(head, message);
-
-          [entry.source, entry.url, entry.title].filter(Boolean).forEach((value) => {
-            const meta = document.createElement('code');
-            meta.textContent = String(value);
-            meta.style.color = '#b9c9e2';
-            meta.style.fontSize = '12px';
-            meta.style.lineHeight = '1.45';
-            meta.style.wordBreak = 'break-word';
-            item.append(meta);
-          });
-
-          consolePanel.append(item);
-        });
-      } else {
-        consolePanel.append(makeEmptyInspectorMessage('No runtime events were captured for this clip.'));
-      }
-
-      if (chromeDebugger?.logs.length) {
-        const debuggerLogsCard = makeSectionCard(
-          'Chrome debugger logs',
-          `${chromeDebugger.logs.length} entries captured while the snapshot session was attached.`,
-        );
-        const debuggerLogsList = document.createElement('div');
-        debuggerLogsList.style.display = 'grid';
-        debuggerLogsList.style.gap = '8px';
-
-        chromeDebugger.logs.forEach((entry) => {
-          const item = document.createElement('article');
-          item.style.display = 'grid';
-          item.style.gap = '8px';
-          item.style.padding = '12px';
-          item.style.borderRadius = '16px';
-          item.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-          item.style.background = 'rgba(255, 255, 255, 0.035)';
-
-          const head = document.createElement('div');
-          head.style.display = 'flex';
-          head.style.alignItems = 'center';
-          head.style.justifyContent = 'space-between';
-          head.style.gap = '10px';
-          head.style.flexWrap = 'wrap';
-
-          const badge = document.createElement('span');
-          badge.textContent = `${entry.source} ${entry.level}`.trim();
-          badge.style.display = 'inline-flex';
-          badge.style.alignItems = 'center';
-          badge.style.minHeight = '24px';
-          badge.style.padding = '0 10px';
-          badge.style.borderRadius = '999px';
-          badge.style.background = 'rgba(255,255,255,0.08)';
-          badge.style.fontSize = '11px';
-          badge.style.fontWeight = '800';
-          badge.style.letterSpacing = '0.06em';
-          badge.style.textTransform = 'uppercase';
-
-          const time = document.createElement('time');
-          time.textContent = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'Chrome snapshot';
-          time.style.color = '#9db2cf';
-          time.style.fontSize = '12px';
-
-          const text = document.createElement('p');
-          text.textContent = entry.text;
-          text.style.margin = '0';
-          text.style.color = '#e7effb';
-          text.style.fontSize = '13px';
-          text.style.lineHeight = '1.5';
-
-          head.append(badge, time);
-          item.append(head, text);
-
-          if (entry.url) {
-            const meta = document.createElement('code');
-            meta.textContent = entry.url;
-            meta.style.color = '#b9c9e2';
-            meta.style.fontSize = '12px';
-            meta.style.lineHeight = '1.45';
-            meta.style.wordBreak = 'break-word';
-            item.append(meta);
-          }
-
-          debuggerLogsList.append(item);
-        });
-
-        debuggerLogsCard.append(debuggerLogsList);
-        consolePanel.append(debuggerLogsCard);
-      } else if (chromeDebugger?.attachError) {
-        consolePanel.append(makeEmptyInspectorMessage(`Chrome debugger snapshot unavailable: ${chromeDebugger.attachError}`));
-      }
-
-      if (runtimeContext?.network.length) {
-        runtimeContext.network.forEach((entry) => {
-          const item = document.createElement('article');
-          item.style.display = 'grid';
-          item.style.gap = '8px';
-          item.style.padding = '12px';
-          item.style.borderRadius = '16px';
-          item.style.border =
-            entry.classification === 'failed'
-              ? '1px solid rgba(255, 132, 95, 0.24)'
-              : entry.classification === 'slow'
-                ? '1px solid rgba(255, 196, 94, 0.24)'
-                : '1px solid rgba(157, 177, 207, 0.14)';
-          item.style.background =
-            entry.classification === 'failed'
-              ? 'rgba(105, 31, 40, 0.18)'
-              : entry.classification === 'slow'
-                ? 'rgba(82, 61, 17, 0.18)'
-                : 'rgba(255, 255, 255, 0.035)';
-
-          const head = document.createElement('div');
-          head.style.display = 'flex';
-          head.style.alignItems = 'center';
-          head.style.justifyContent = 'space-between';
-          head.style.gap = '10px';
-          head.style.flexWrap = 'wrap';
-
-          const badge = document.createElement('span');
-          badge.textContent = `${entry.transport} ${entry.method}`;
-          badge.style.display = 'inline-flex';
-          badge.style.alignItems = 'center';
-          badge.style.minHeight = '24px';
-          badge.style.padding = '0 10px';
-          badge.style.borderRadius = '999px';
-          badge.style.background = 'rgba(255,255,255,0.08)';
-          badge.style.fontSize = '11px';
-          badge.style.fontWeight = '800';
-          badge.style.letterSpacing = '0.06em';
-          badge.style.textTransform = 'uppercase';
-
-          const meta = document.createElement('time');
-          meta.textContent = `${entry.status === null ? 'ERR' : entry.status} • ${entry.durationMs}ms`;
-          meta.style.color = '#9db2cf';
-          meta.style.fontSize = '12px';
-
-          const url = document.createElement('p');
-          url.textContent = entry.url;
-          url.style.margin = '0';
-          url.style.color = '#e7effb';
-          url.style.fontSize = '13px';
-          url.style.lineHeight = '1.5';
-          url.style.wordBreak = 'break-word';
-
-          const classification = document.createElement('code');
-          classification.textContent = `${entry.classification} • ${new Date(entry.finishedAt).toLocaleTimeString()}`;
-          classification.style.color = '#b9c9e2';
-          classification.style.fontSize = '12px';
-          classification.style.lineHeight = '1.45';
-
-          head.append(badge, meta);
-          item.append(head, url, classification);
-
-          if (entry.error) {
-            const error = document.createElement('code');
-            error.textContent = entry.error;
-            error.style.color = '#ffc1c7';
-            error.style.fontSize = '12px';
-            error.style.lineHeight = '1.45';
-            error.style.wordBreak = 'break-word';
-            item.append(error);
-          }
-
-          networkPanel.append(item);
-        });
-      } else {
-        networkPanel.append(makeEmptyInspectorMessage('No network requests were captured for this clip.'));
-      }
-
-      if (chromeDebugger?.network.length) {
-        const debuggerNetworkCard = makeSectionCard(
-          'Chrome debugger network snapshot',
-          `${chromeDebugger.network.length} requests observed while the debugger session was attached.`,
-        );
-        const debuggerNetworkList = document.createElement('div');
-        debuggerNetworkList.style.display = 'grid';
-        debuggerNetworkList.style.gap = '8px';
-
-        chromeDebugger.network.forEach((entry) => {
-          const item = document.createElement('article');
-          item.style.display = 'grid';
-          item.style.gap = '8px';
-          item.style.padding = '12px';
-          item.style.borderRadius = '16px';
-          item.style.border =
-            entry.failedReason || entry.blockedReason || entry.status === null
-              ? '1px solid rgba(255, 132, 95, 0.24)'
-              : '1px solid rgba(157, 177, 207, 0.14)';
-          item.style.background =
-            entry.failedReason || entry.blockedReason || entry.status === null
-              ? 'rgba(105, 31, 40, 0.18)'
-              : 'rgba(255, 255, 255, 0.035)';
-
-          const head = document.createElement('div');
-          head.style.display = 'flex';
-          head.style.alignItems = 'center';
-          head.style.justifyContent = 'space-between';
-          head.style.gap = '10px';
-          head.style.flexWrap = 'wrap';
-
-          const badge = document.createElement('span');
-          badge.textContent = entry.resourceType ? `${entry.method} ${entry.resourceType}` : entry.method;
-          badge.style.display = 'inline-flex';
-          badge.style.alignItems = 'center';
-          badge.style.minHeight = '24px';
-          badge.style.padding = '0 10px';
-          badge.style.borderRadius = '999px';
-          badge.style.background = 'rgba(255,255,255,0.08)';
-          badge.style.fontSize = '11px';
-          badge.style.fontWeight = '800';
-          badge.style.letterSpacing = '0.06em';
-          badge.style.textTransform = 'uppercase';
-
-          const meta = document.createElement('time');
-          meta.textContent = `${typeof entry.status === 'number' ? entry.status : 'ERR'}${entry.encodedDataLength ? ` • ${entry.encodedDataLength} bytes` : ''}`;
-          meta.style.color = '#9db2cf';
-          meta.style.fontSize = '12px';
-
-          const url = document.createElement('p');
-          url.textContent = entry.url;
-          url.style.margin = '0';
-          url.style.color = '#e7effb';
-          url.style.fontSize = '13px';
-          url.style.lineHeight = '1.5';
-          url.style.wordBreak = 'break-word';
-
-          head.append(badge, meta);
-          item.append(head, url);
-
-          const extras = [entry.mimeType, entry.priority, entry.failedReason, entry.blockedReason]
-            .filter(Boolean)
-            .join(' • ');
-          if (extras) {
-            const extra = document.createElement('code');
-            extra.textContent = extras;
-            extra.style.color = '#b9c9e2';
-            extra.style.fontSize = '12px';
-            extra.style.lineHeight = '1.45';
-            extra.style.wordBreak = 'break-word';
-            item.append(extra);
-          }
-
-          debuggerNetworkList.append(item);
-        });
-
-        debuggerNetworkCard.append(debuggerNetworkList);
-        networkPanel.append(debuggerNetworkCard);
-      } else if (chromeDebugger?.attachError) {
-        networkPanel.append(makeEmptyInspectorMessage(`Chrome debugger snapshot unavailable: ${chromeDebugger.attachError}`));
-      }
-
-      const domSummary = runtimeContext?.domSummary;
-      const domPathCard = makeSectionCard('Visible page summary', domSummary?.path || 'No DOM summary captured.');
-      domPathCard.append(makeKeyValueRow('Path', domSummary?.path || `${window.location.pathname}${window.location.search}${window.location.hash}`));
-      domPanel.append(domPathCard);
-
-      const headingsCard = makeSectionCard('Headings');
-      headingsCard.append(makeTagList(domSummary?.headingTexts || pageContext.domSummary.headings, 'No headings captured.'));
-      domPanel.append(headingsCard);
-
-      const buttonsCard = makeSectionCard('Buttons');
-      buttonsCard.append(makeTagList(domSummary?.buttonTexts || pageContext.domSummary.buttons, 'No buttons captured.'));
-      domPanel.append(buttonsCard);
-
-      const fieldsCard = makeSectionCard('Fields');
-      fieldsCard.append(makeTagList(domSummary?.inputLabels || pageContext.domSummary.fields, 'No fields captured.'));
-      domPanel.append(fieldsCard);
+      const technicalBody = document.createElement('div');
+      technicalBody.style.display = 'grid';
+      technicalBody.style.gap = '12px';
 
       const systemCard = makeSectionCard('Page and browser');
       systemCard.append(
@@ -1855,7 +1771,7 @@ function mountClipOverlay(
         makeKeyValueRow('Time zone', pageContext.timeZone),
         makeKeyValueRow('User agent', pageContext.userAgent),
       );
-      systemPanel.append(systemCard);
+      technicalBody.append(systemCard);
 
       const monitorCard = makeSectionCard(
         'Runtime monitor',
@@ -1865,149 +1781,83 @@ function mountClipOverlay(
         makeKeyValueRow('Installed', runtimeSummary ? new Date(runtimeSummary.installedAt).toLocaleString() : 'Unavailable'),
         makeKeyValueRow('Last seen', runtimeSummary ? new Date(runtimeSummary.lastSeenAt).toLocaleString() : 'Unavailable'),
       );
-      systemPanel.append(monitorCard);
+      technicalBody.append(monitorCard);
 
       if (chromeDebugger) {
         const debuggerSystemCard = makeSectionCard(
           'Chrome debugger snapshot',
-          chromeDebugger.attachError
-            ? chromeDebugger.attachError
+          friendlyDebuggerMessage
+            ? 'Optional Chrome-only internals were unavailable for this clip.'
             : `${chromeDebugger.frameCount} frames • ${formatBytes(chromeDebugger.performance.jsHeapUsedSize)} used heap`,
         );
-        debuggerSystemCard.append(
-          makeKeyValueRow('Captured at', new Date(chromeDebugger.capturedAt).toLocaleString()),
-          makeKeyValueRow('Current URL', chromeDebugger.currentUrl),
-          makeKeyValueRow('Current title', chromeDebugger.currentTitle),
-          makeKeyValueRow('Frame count', formatCount(chromeDebugger.frameCount)),
-          makeKeyValueRow('DOM nodes', formatCount(chromeDebugger.performance.nodes)),
-          makeKeyValueRow('JS listeners', formatCount(chromeDebugger.performance.jsEventListeners)),
-          makeKeyValueRow('JS heap used', formatBytes(chromeDebugger.performance.jsHeapUsedSize)),
-          makeKeyValueRow('JS heap total', formatBytes(chromeDebugger.performance.jsHeapTotalSize)),
-          makeKeyValueRow('Layout count', formatCount(chromeDebugger.performance.layoutCount)),
-          makeKeyValueRow('Style recalcs', formatCount(chromeDebugger.performance.recalcStyleCount)),
-          makeKeyValueRow('Task duration', formatDuration(chromeDebugger.performance.taskDuration)),
-        );
+        if (friendlyDebuggerMessage) {
+          const unavailableBody = document.createElement('p');
+          unavailableBody.textContent =
+            'You still have the screenshot, prompt, annotations, page context, and runtime signals. This extra Chrome-only layer just was not available for this clip.';
+          unavailableBody.style.margin = '0';
+          unavailableBody.style.color = '#d8e3f2';
+          unavailableBody.style.fontSize = '13px';
+          unavailableBody.style.lineHeight = '1.55';
+          debuggerSystemCard.append(makeKeyValueRow('Status', friendlyDebuggerMessage), unavailableBody);
+
+          if (chromeDebugger.attachError && friendlyDebuggerMessage !== chromeDebugger.attachError) {
+            debuggerSystemCard.append(makeKeyValueRow('Raw error', chromeDebugger.attachError));
+          }
+        } else {
+          debuggerSystemCard.append(
+            makeKeyValueRow('Status', 'Snapshot captured'),
+            makeKeyValueRow('Captured at', new Date(chromeDebugger.capturedAt).toLocaleString()),
+            makeKeyValueRow('Current URL', chromeDebugger.currentUrl),
+            makeKeyValueRow('Current title', chromeDebugger.currentTitle),
+            makeKeyValueRow('Frame count', formatCount(chromeDebugger.frameCount)),
+            makeKeyValueRow('DOM nodes', formatCount(chromeDebugger.performance.nodes)),
+            makeKeyValueRow('JS listeners', formatCount(chromeDebugger.performance.jsEventListeners)),
+            makeKeyValueRow('JS heap used', formatBytes(chromeDebugger.performance.jsHeapUsedSize)),
+            makeKeyValueRow('JS heap total', formatBytes(chromeDebugger.performance.jsHeapTotalSize)),
+            makeKeyValueRow('Layout count', formatCount(chromeDebugger.performance.layoutCount)),
+            makeKeyValueRow('Style recalcs', formatCount(chromeDebugger.performance.recalcStyleCount)),
+            makeKeyValueRow('Task duration', formatDuration(chromeDebugger.performance.taskDuration)),
+          );
+        }
 
         if (chromeDebugger.detachReason) {
           debuggerSystemCard.append(makeKeyValueRow('Detach reason', chromeDebugger.detachReason));
         }
 
-        systemPanel.append(debuggerSystemCard);
-
-        const debuggerFramesCard = makeSectionCard(
-          'Frames',
-          chromeDebugger.frames.length ? `${chromeDebugger.frames.length} frame records captured.` : 'No frame records captured.',
-        );
-        if (chromeDebugger.frames.length) {
-          const framesList = document.createElement('div');
-          framesList.style.display = 'grid';
-          framesList.style.gap = '8px';
-
-          chromeDebugger.frames.forEach((frame) => {
-            const row = document.createElement('div');
-            row.style.display = 'grid';
-            row.style.gap = '4px';
-            row.style.padding = '12px';
-            row.style.borderRadius = '14px';
-            row.style.background = 'rgba(255, 255, 255, 0.035)';
-            row.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-
-            row.append(
-              makeKeyValueRow('Frame', frame.url || frame.id),
-              makeKeyValueRow('Security', frame.secureContextType || 'Unknown'),
-              makeKeyValueRow('Domain', frame.domainAndRegistry || 'Unknown'),
-            );
-
-            framesList.append(row);
-          });
-
-          debuggerFramesCard.append(framesList);
-        } else {
-          debuggerFramesCard.append(makeEmptyInspectorMessage('No frame details were captured from Chrome debugger.'));
-        }
-
-        systemPanel.append(debuggerFramesCard);
+        technicalBody.append(debuggerSystemCard);
       }
 
-      const detailPanels: Record<'overview' | 'console' | 'network' | 'dom' | 'system', HTMLDivElement> = {
-        overview: overviewPanel,
-        console: consolePanel,
-        network: networkPanel,
-        dom: domPanel,
-        system: systemPanel,
-      };
+      technicalDetails.append(technicalSummary, technicalBody);
+      debugWorkspace.style.gridColumn = '1 / -1';
+      debugWorkspace.append(detailsHead, debugTopGrid, overviewStrip, importantCard, consoleCard, networkCard, pageContextCard, technicalDetails);
 
-      const detailTabButtons: Record<'overview' | 'console' | 'network' | 'dom' | 'system', HTMLButtonElement> = {
-        overview: document.createElement('button'),
-        console: document.createElement('button'),
-        network: document.createElement('button'),
-        dom: document.createElement('button'),
-        system: document.createElement('button'),
-      };
-
-      detailTabButtons.overview.textContent = 'Overview';
-      detailTabButtons.console.textContent = 'Console';
-      detailTabButtons.network.textContent = 'Network';
-      detailTabButtons.dom.textContent = 'DOM';
-      detailTabButtons.system.textContent = 'System';
-
-      let activeDetailsTab: keyof typeof detailPanels = 'overview';
-
-      Object.values(detailTabButtons).forEach((button) => {
-        button.style.border = '0';
-        button.style.borderRadius = '12px';
-        button.style.padding = '10px 12px';
-        button.style.font = 'inherit';
-        button.style.fontSize = '12px';
-        button.style.fontWeight = '700';
-        button.style.cursor = 'pointer';
-        button.style.background = 'rgba(255,255,255,0.08)';
-        button.style.color = '#cfe0f4';
-      });
-
-      const syncDetailsTab = () => {
-        (Object.entries(detailPanels) as Array<[keyof typeof detailPanels, HTMLDivElement]>).forEach(([key, panel]) => {
-          panel.style.display = key === activeDetailsTab ? 'grid' : 'none';
-        });
-
-        (Object.entries(detailTabButtons) as Array<[keyof typeof detailTabButtons, HTMLButtonElement]>).forEach(
-          ([key, button]) => {
-            button.style.background =
-              key === activeDetailsTab
-                ? 'linear-gradient(135deg, rgba(106, 207, 255, 0.2) 0%, rgba(59, 130, 255, 0.16) 100%)'
-                : 'rgba(255,255,255,0.08)';
-            button.style.color = key === activeDetailsTab ? '#eef8ff' : '#cfe0f4';
-            button.style.boxShadow = key === activeDetailsTab ? '0 0 0 1px rgba(117, 204, 255, 0.22) inset' : 'none';
-          },
-        );
-      };
-
-      (Object.entries(detailTabButtons) as Array<[keyof typeof detailTabButtons, HTMLButtonElement]>).forEach(
-        ([key, button]) => {
-          button.addEventListener('click', () => {
-            activeDetailsTab = key;
-            syncDetailsTab();
-          });
-          detailTabs.append(button);
-        },
-      );
-
-      detailBody.append(overviewPanel, consolePanel, networkPanel, domPanel, systemPanel);
-      detailShell.append(overviewStrip, detailTabs, detailBody);
-      syncDetailsTab();
+      const scrollbarStyle = document.createElement('style');
+      scrollbarStyle.textContent = `
+        [data-snapclip-scroll="hidden"]::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
+      `;
 
       mainColumn.append(metaRow, stage);
       composePanel.append(noteCard, actionRow);
-      detailsPanel.append(detailsHead, detailShell);
-      sideRail.append(railHeader, composePanel, detailsPanel);
-      contentGrid.append(mainColumn, sideRail);
-      editor.append(contentGrid);
-      root.append(editor);
+      sideRail.append(composePanel);
+      contentGrid.append(mainColumn, sideRail, debugWorkspace);
+      editor.append(scrollbarStyle, closeButton, contentGrid);
+      root.append(editor, cursorBubble);
+
+      const syncDebugWorkspace = () => {
+        const promptText = noteField.value.trim();
+        promptSummaryBody.textContent = promptText || 'No prompt yet. Add one when you go back to the editor.';
+        promptSummaryBody.style.color = promptText ? '#eef4fb' : '#9db2cf';
+      };
+
+      noteField.addEventListener('input', syncDebugWorkspace);
+      syncDebugWorkspace();
 
       window.setTimeout(() => {
-        titleInput.focus();
-        const length = titleInput.value.length;
-        titleInput.setSelectionRange(length, length);
+        noteField.focus();
       }, 30);
 
       let activeTool: 'text' | 'box' | 'arrow' = 'box';
@@ -2033,6 +1883,54 @@ function mountClipOverlay(
           }
         | null = null;
       let composerDragOffset: { x: number; y: number } | null = null;
+      let isStageHovered = false;
+      let lastStagePointer: { clientX: number; clientY: number } | null = null;
+
+      const describeStageCursor = () => {
+        if (movingAnnotation) {
+          if (movingAnnotation.mode === 'resize-box') {
+            return 'Drag to resize box';
+          }
+          if (movingAnnotation.mode === 'resize-arrow-start' || movingAnnotation.mode === 'resize-arrow-end') {
+            return 'Drag to retarget arrow';
+          }
+          return movingAnnotation.original.kind === 'text'
+            ? 'Move text'
+            : movingAnnotation.original.kind === 'box'
+              ? 'Move box'
+              : 'Move arrow';
+        }
+
+        if (editorDraftShape) {
+          if (editorDraftShape.kind === 'box') {
+            const bounds = stage.getBoundingClientRect();
+            const width = Math.round((editorDraftShape.width / 100) * bounds.width);
+            const height = Math.round((editorDraftShape.height / 100) * bounds.height);
+            return width > 0 && height > 0 ? `${width} x ${height}` : 'Drag to draw box';
+          }
+
+          return 'Release to place arrow';
+        }
+
+        if (selectedAnnotationId) {
+          const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null;
+          if (selectedAnnotation?.kind === 'text') {
+            return 'Drag to move text';
+          }
+          if (selectedAnnotation?.kind === 'box') {
+            return 'Drag to move box';
+          }
+          if (selectedAnnotation?.kind === 'arrow') {
+            return 'Drag to move arrow';
+          }
+        }
+
+        return activeTool === 'text'
+          ? 'Click to add text'
+          : activeTool === 'box'
+            ? 'Drag to draw box'
+            : 'Drag to draw arrow';
+      };
 
       const textComposer = document.createElement('div');
       textComposer.style.position = 'absolute';
@@ -2291,6 +2189,7 @@ function mountClipOverlay(
         }
 
         renderSelectionHint();
+        syncStageCursorBubble();
       };
 
       const closeTextComposer = (restoreFocus = true) => {
@@ -2299,6 +2198,11 @@ function mountClipOverlay(
         textComposerInput.value = '';
         textComposer.style.display = 'none';
         composerDragOffset = null;
+        if (isStageHovered) {
+          syncStageCursorBubble();
+        } else {
+          hideCursorBubble();
+        }
         if (restoreFocus) {
           stage.focus();
         }
@@ -2369,6 +2273,7 @@ function mountClipOverlay(
         textComposer.style.left = `${localX}px`;
         textComposer.style.top = `${localY}px`;
         textComposer.style.display = 'grid';
+        hideCursorBubble();
         textComposerInput.value = '';
         window.setTimeout(() => {
           textComposerInput.focus();
@@ -2389,6 +2294,7 @@ function mountClipOverlay(
         textComposer.style.left = `${localX}px`;
         textComposer.style.top = `${localY}px`;
         textComposer.style.display = 'grid';
+        hideCursorBubble();
         textComposerInput.value = annotation.text;
         window.setTimeout(() => {
           textComposerInput.focus();
@@ -2523,6 +2429,29 @@ function mountClipOverlay(
           })
           .find((result) => result !== null) ?? null;
 
+      const syncStageCursorBubble = (clientX?: number, clientY?: number) => {
+        if (typeof clientX === 'number' && typeof clientY === 'number') {
+          lastStagePointer = { clientX, clientY };
+        }
+
+        if (!isStageHovered || railMode === 'details' || textComposer.style.display !== 'none') {
+          hideCursorBubble();
+          return;
+        }
+
+        const pointer = lastStagePointer;
+        if (!pointer) {
+          hideCursorBubble();
+          return;
+        }
+
+        const label =
+          editorDraftShape?.kind === 'box'
+            ? describeStageCursor()
+            : '';
+        showCursorBubble(label, pointer.clientX, pointer.clientY);
+      };
+
       const toPercentPoint = (clientX: number, clientY: number, bounds: DOMRect) => ({
         x: (clamp(clientX - bounds.left, 0, bounds.width) / bounds.width) * 100,
         y: (clamp(clientY - bounds.top, 0, bounds.height) / bounds.height) * 100,
@@ -2573,20 +2502,31 @@ function mountClipOverlay(
 
       const syncRailMode = () => {
         const showDetails = railMode === 'details';
+        contentGrid.style.gridTemplateColumns = showDetails ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(380px, 420px)';
+        mainColumn.style.display = showDetails ? 'none' : 'grid';
+        sideRail.style.display = showDetails ? 'none' : 'grid';
         composePanel.style.display = showDetails ? 'none' : 'grid';
-        detailsPanel.style.display = showDetails ? 'grid' : 'none';
-        detailsButton.textContent = showDetails ? 'Back to editor' : 'Debug info';
+        debugWorkspace.style.display = showDetails ? 'grid' : 'none';
+        detailsButton.textContent = 'Debug info';
+        if (showDetails) {
+          hideCursorBubble();
+          return;
+        }
+        syncStageCursorBubble();
       };
 
       detailsButton.addEventListener('click', () => {
         railMode = 'details';
         syncRailMode();
-        setActionStatus('Showing debug inspector.');
+        debugWorkspace.scrollTop = 0;
+        detailsBackButton.focus();
+        setActionStatus('Showing debug report.');
       });
 
       detailsBackButton.addEventListener('click', () => {
         railMode = 'compose';
         syncRailMode();
+        noteField.focus();
         setActionStatus('Back to editor.');
       });
 
@@ -2659,7 +2599,7 @@ function mountClipOverlay(
           ? recentMessages.map((line) => `- ${line}`).join('\n')
           : '- No immediate errors or failed requests captured.';
         const summaryText = [
-          `# ${titleInput.value || 'Clip'}`,
+          `# ${clipTitle}`,
           '',
           noteField.value.trim() ? `Instructions:\n${noteField.value.trim()}` : '',
           '',
@@ -2719,11 +2659,20 @@ function mountClipOverlay(
       });
 
       const syncActiveTool = () => {
-        toolTextButton.style.boxShadow = activeTool === 'text' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
-        toolBoxButton.style.boxShadow = activeTool === 'box' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
-        toolArrowButton.style.boxShadow = activeTool === 'arrow' ? '0 0 0 1px rgba(103, 209, 255, 0.5) inset' : 'none';
-        stage.style.cursor = activeTool === 'text' ? 'text' : 'crosshair';
+        const setToolState = (button: HTMLButtonElement, isActive: boolean) => {
+          button.style.background = isActive
+            ? 'linear-gradient(135deg, rgba(106, 207, 255, 0.24) 0%, rgba(59, 130, 255, 0.2) 100%)'
+            : 'rgba(255,255,255,0.08)';
+          button.style.color = isActive ? '#f3fbff' : '#d7e4f5';
+          button.style.boxShadow = isActive ? '0 0 0 1px rgba(103, 209, 255, 0.42) inset' : 'none';
+        };
+
+        setToolState(toolTextButton, activeTool === 'text');
+        setToolState(toolBoxButton, activeTool === 'box');
+        setToolState(toolArrowButton, activeTool === 'arrow');
+        stage.style.cursor = 'none';
         renderSelectionHint();
+        syncStageCursorBubble();
       };
 
       const setActionStatus = (
@@ -2862,6 +2811,19 @@ function mountClipOverlay(
         stage.style.borderColor = 'rgba(157, 177, 207, 0.16)';
       });
 
+      stage.addEventListener('pointerenter', (event) => {
+        isStageHovered = true;
+        syncStageCursorBubble(event.clientX, event.clientY);
+      });
+
+      stage.addEventListener('pointerleave', (event) => {
+        if (stage.hasPointerCapture(event.pointerId)) {
+          return;
+        }
+        isStageHovered = false;
+        hideCursorBubble();
+      });
+
       stage.addEventListener('keydown', (event) => {
         if (event.key === 'Backspace' || event.key === 'Delete') {
           event.preventDefault();
@@ -2924,6 +2886,8 @@ function mountClipOverlay(
         }
 
         event.preventDefault();
+        isStageHovered = true;
+        syncStageCursorBubble(event.clientX, event.clientY);
         const bounds = stage.getBoundingClientRect();
         closeTextComposer(false);
         const percentPoint = toPercentPoint(event.clientX, event.clientY, bounds);
@@ -2961,6 +2925,9 @@ function mountClipOverlay(
       });
 
       stage.addEventListener('pointermove', (event) => {
+        isStageHovered = true;
+        syncStageCursorBubble(event.clientX, event.clientY);
+
         if (movingAnnotation) {
           const bounds = stage.getBoundingClientRect();
           const currentPoint = toPercentPoint(event.clientX, event.clientY, bounds);
@@ -3034,6 +3001,7 @@ function mountClipOverlay(
           movingAnnotation = null;
           setActionStatus('Annotation moved.', 'success');
           announce('Annotation moved.', 'success');
+          syncStageCursorBubble(event.clientX, event.clientY);
           return;
         }
 
@@ -3096,6 +3064,7 @@ function mountClipOverlay(
         }
 
         renderEditorAnnotations();
+        syncStageCursorBubble(event.clientX, event.clientY);
       };
 
       stage.addEventListener('pointerup', finishAnnotation);
@@ -3107,10 +3076,10 @@ function mountClipOverlay(
             saveButton.disabled = true;
             saveButton.textContent = 'Saving...';
             setActionStatus('Saving clip...');
-            await chrome.runtime.sendMessage({
+            const response = await chrome.runtime.sendMessage({
               type: 'commit-clip',
               clipMode,
-              title: titleInput.value,
+              title: clipTitle,
               note: noteField.value,
               imageDataUrl: clipDataUrl,
               imageWidth: image.naturalWidth,
@@ -3120,6 +3089,9 @@ function mountClipOverlay(
               runtimeContext,
               annotations,
             });
+            if (!response?.ok) {
+              throw new Error(response?.error || 'Clip save failed.');
+            }
 
             try {
               await chrome.runtime.sendMessage({

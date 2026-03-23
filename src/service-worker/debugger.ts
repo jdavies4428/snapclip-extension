@@ -5,7 +5,7 @@ import type {
   ChromeDebuggerNetworkRequest,
 } from '../shared/types/session';
 
-const DEBUGGER_PROTOCOL_VERSION = '0.1';
+const DEBUGGER_PROTOCOL_VERSIONS = ['1.3', '1.2', '1.1', '1.0', '0.1'] as const;
 const MAX_LOG_ENTRIES = 12;
 const MAX_NETWORK_ENTRIES = 12;
 const MAX_FRAME_ENTRIES = 8;
@@ -360,7 +360,24 @@ export async function captureChromeDebuggerContext(
   chrome.debugger.onDetach.addListener(handleDetach);
 
   try {
-    await chrome.debugger.attach(target, DEBUGGER_PROTOCOL_VERSION);
+    let attachedVersion: string | null = null;
+    let lastAttachError: unknown = null;
+
+    for (const version of DEBUGGER_PROTOCOL_VERSIONS) {
+      try {
+        await chrome.debugger.attach(target, version);
+        attachedVersion = version;
+        attached = true;
+        break;
+      } catch (error) {
+        lastAttachError = error;
+      }
+    }
+
+    if (!attachedVersion) {
+      throw lastAttachError instanceof Error ? lastAttachError : new Error('Chrome debugger snapshot failed.');
+    }
+
     attached = true;
 
     await Promise.allSettled([

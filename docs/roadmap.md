@@ -8,17 +8,21 @@
 - side panel review workspace
 - current-site side-panel permission flow
 - image, JSON, and Markdown export
+- localhost bridge workspace discovery and deterministic bundle writing
+- Claude hook installation support and live session discovery
+- direct Claude session delivery with bundle-preserved fallback
+- clip-level persisted handoff status
 
 ## Next milestone
 
 - capture reliability hardening
-- modal-first authoring polish
-- session gallery ergonomics
-- tabbed evidence inspector
-- deterministic Claude/Codex bundle contract
-- localhost bridge delivery with preserved bundle failures
+- modal/editor simplicity pass and live Chrome scroll polish
+- approval UX for pending Claude permission requests
+- end-to-end smoke coverage for bridge + live Claude session delivery
+- evidence inspector polish that stays readable for non-DevTools users
 
 ## Later
 
 - bounded opt-in debug mode
-- deep debugger decision gate
+- deeper Chrome debugger signal shaping
+- multi-workspace session management polish

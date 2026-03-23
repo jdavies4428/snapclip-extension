@@ -4,26 +4,29 @@ LLM Clip is a greenfield Chrome extension for current-tab capture and AI-first c
 
 ## Current milestone
 
-This repo is now in the staged v1 buildout. The live implementation currently covers the Stage 1 capture-core foundation plus early runtime collection work:
+This repo is now in the staged v1 buildout. The live implementation currently covers capture, local persistence, and bridge-backed AI handoff:
 
 - installs locally as an unpacked extension
 - popup opens and can trigger current-tab clipping
 - keyboard shortcuts can start visible-tab and region clipping
 - side panel is the main clip workspace
-- side panel can request current-site access to launch capture directly
+- the side panel capture buttons are the only current-site access launch surface
+- the editor modal stays focused on post-capture annotation, copy, export, and send
 - side panel can assemble a deterministic incident packet and talk to the local LLM Clip bridge
+- the localhost bridge can discover workspaces, track live Claude sessions from Claude Code hooks, and queue/resume Claude delivery
+- saved clips persist the latest handoff outcome so bundle-only vs delivered status survives reloads
 - active-tab capture reads page title, URL, viewport, user agent, selected text, and compact DOM summary
 - image assets are stored outside `chrome.storage.local`
 - clips can be copied or exported as JSON/Markdown from the side panel
-- Claude/Codex handoff controls now exist in the side panel, backed by the localhost bridge flow
-- early runtime context capture exists for console, route, and fetch/XHR diagnostics
+- Claude/Codex handoff controls exist in both the side panel and the clip editor, backed by the localhost bridge flow
+- runtime context capture includes console, route, fetch/XHR diagnostics, plus a bounded Chrome debugger snapshot when Chrome allows it
 
 Not included yet:
 
 - full SnapTool-parity annotation tools
-- local bundle writing to a workspace folder
-- Claude/Codex hook delivery
-- opt-in bounded debug mode UX
+- browser-smoke-tested hook installation UX inside Chrome
+- richer approval UI for pending Claude permission requests
+- opt-in bounded debug mode UX polish
 - full-page capture
 - cloud storage, accounts, or collaboration
 
@@ -57,6 +60,28 @@ npm run dev
 
 `npm run dev` uses Vite in watch mode and writes updated extension assets into `dist/`.
 
+## Local bridge
+
+Start the localhost bridge from the repo root:
+
+```bash
+SNAPCLIP_BRIDGE_WORKSPACES=/absolute/path/to/workspace npm run bridge:start
+```
+
+If `SNAPCLIP_BRIDGE_WORKSPACES` is omitted, the bridge uses the current repo root as its workspace. The default bridge address is `http://127.0.0.1:4311` and the default token is `snapclip-dev`.
+
+Install Claude Code hooks into your local Claude settings:
+
+```bash
+npm run bridge:install-hooks
+```
+
+Optional overrides:
+
+```bash
+npm run bridge:install-hooks -- --settings /absolute/path/to/settings.local.json --base-url http://127.0.0.1:4311 --token snapclip-dev
+```
+
 ## Load unpacked in Chrome
 
 1. Open `chrome://extensions`.
@@ -73,12 +98,32 @@ npm run dev
 4. The service worker captures a visible-tab screenshot.
 5. The clip is appended to the current local clip session while image assets live in IndexedDB-backed blob storage.
 6. The side panel becomes the working surface for annotation, copy, export, and bridge-backed AI handoff.
+7. When the local bridge sees a live Claude session, the same bundle can be delivered directly with `claude --resume <sessionId> -p ...`; otherwise it is still preserved locally as a deterministic bundle.
 
 Unsupported pages:
 - `chrome://`
 - Chrome Web Store
 - extension pages
 - PDF tabs
+
+## Bridge contract
+
+The localhost bridge now owns:
+
+- workspace discovery
+- live Claude session discovery from Claude Code hooks
+- pending approval tracking for Claude permission hooks
+- deterministic bundle writing into the selected workspace
+- direct Claude session delivery with preserved bundle failures
+
+The extension still owns:
+
+- capture
+- annotation
+- prompt drafting
+- deterministic artifact assembly
+- local clip/session persistence
+- handoff status visibility in the side panel
 
 ## Docs
 

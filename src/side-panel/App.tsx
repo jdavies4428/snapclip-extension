@@ -1,45 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  createBridgeTask,
-  getBridgeConfig,
-  listBridgeSessions,
-  listBridgeWorkspaces,
-  setBridgeConfig,
-  type BridgeSession,
-  type BridgeTaskResponse,
-  type BridgeWorkspace,
+  type BridgeTask,
   type HandoffIntent,
   type HandoffTarget,
 } from '../shared/bridge/client';
+import { buildBridgeTaskRequest } from '../shared/bridge/handoff';
 import type { SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
-import type { ClipRecord, ClipSession } from '../shared/types/session';
-import { createClipBundleArtifacts } from '../shared/export/bundle';
+import type { ClipHandoffRecord, ClipRecord, ClipSession } from '../shared/types/session';
 import { describeEvidenceProfile, type EvidenceProfile } from '../shared/export/evidence';
-import { renderAnnotatedClipBlob } from '../shared/export/render-annotated';
 import { createClipSessionMarkdown } from '../shared/export/session-markdown';
 import { getClipAssetBlob } from '../shared/storage/blob-store';
 import { AnnotationCanvas } from './components/AnnotationCanvas';
 import { useClipAssetUrl } from './state/useClipAssetUrl';
+import { useBridgeHandoff } from './state/useBridgeHandoff';
+import { useBridgeState } from './state/useBridgeState';
 import { useClipSession } from './state/useClipSession';
 
 type HandoffScope = 'active_clip' | 'session';
 
-type HandoffResult = {
-  taskId: string;
-  bundlePath: string;
-  deliveryState: BridgeTaskResponse['delivery']['state'];
-  deliveryTarget: BridgeTaskResponse['delivery']['target'];
-  deliveryError: string | null;
-  sessionId: string | null;
-};
-
-function isBridgeReadyMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
+function getHandoffStatusMessage(task: BridgeTask, pendingApprovalCount: number) {
+  if (task.delivery.state === 'queued') {
+    return 'Incident packet queued in the local bridge.';
   }
 
-  return 'LLM Clip could not reach the local handoff bridge.';
+  if (task.delivery.state === 'delivering') {
+    return pendingApprovalCount
+      ? `${pendingApprovalCount} Claude approval${pendingApprovalCount === 1 ? '' : 's'} waiting in the local bridge.`
+      : 'Delivering the incident packet through the local bridge...';
+  }
+
+  if (task.delivery.state === 'delivered') {
+    return task.target === 'claude'
+      ? 'Incident packet delivered to Claude and preserved locally.'
+      : 'Incident packet bundle created and preserved locally.';
+  }
+
+  if (task.delivery.state === 'failed_after_bundle_creation') {
+    return 'Delivery failed after bundle creation. The local incident packet was preserved.';
+  }
+
+  return 'Incident packet bundle created locally.';
 }
 
 function getHostLabel(url: string): string {
@@ -120,6 +121,8 @@ function ClipThumbnailButton({
   onEdit: (clipId: string) => void;
 }) {
   const imageUrl = useClipAssetUrl(clip.imageAssetId);
+  const handoffLabel = clip.lastHandoff ? getClipHandoffStateLabel(clip.lastHandoff) : '';
+  const handoffTone = clip.lastHandoff ? getClipHandoffTone(clip.lastHandoff) : 'neutral';
 
   return (
     <button
@@ -141,9 +144,72 @@ function ClipThumbnailButton({
       <div className="clip-thumb-copy">
         <strong>{clip.title || `Clip ${index + 1}`}</strong>
         <span>{new Date(clip.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+        {clip.lastHandoff ? (
+          <>
+            <span className={`handoff-chip handoff-chip-${handoffTone} handoff-chip-compact`}>{handoffLabel}</span>
+            <span className="clip-thumb-handoff">{getClipHandoffSummary(clip.lastHandoff)}</span>
+          </>
+        ) : null}
       </div>
     </button>
   );
+}
+
+function getClipHandoffStateLabel(handoff: ClipHandoffRecord): string {
+  switch (handoff.deliveryState) {
+    case 'delivered':
+      return 'Delivered';
+    case 'failed_after_bundle_creation':
+      return 'Saved locally';
+    case 'bundle_created':
+      return 'Bundle ready';
+    case 'delivering':
+      return 'Sending';
+    case 'queued':
+    default:
+      return 'Queued';
+  }
+}
+
+function getClipHandoffTone(handoff: ClipHandoffRecord): 'success' | 'warning' | 'neutral' {
+  if (handoff.deliveryState === 'delivered') {
+    return 'success';
+  }
+
+  if (handoff.deliveryState === 'failed_after_bundle_creation') {
+    return 'warning';
+  }
+
+  return 'neutral';
+}
+
+function getClipHandoffSummary(handoff: ClipHandoffRecord): string {
+  const timestamp = new Date(handoff.updatedAt).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  if (handoff.deliveryState === 'delivered') {
+    return handoff.sessionLabel ? `Claude -> ${handoff.sessionLabel} at ${timestamp}` : `Delivered at ${timestamp}`;
+  }
+
+  if (handoff.deliveryState === 'failed_after_bundle_creation') {
+    return handoff.target === 'claude'
+      ? `Claude delivery fell back to a local bundle at ${timestamp}`
+      : `Delivery fell back to a local bundle at ${timestamp}`;
+  }
+
+  if (handoff.target === 'claude') {
+    return handoff.sessionLabel
+      ? `Claude bundle for ${handoff.sessionLabel} at ${timestamp}`
+      : `Claude bundle only at ${timestamp}`;
+  }
+
+  if (handoff.target === 'codex') {
+    return `Codex bundle at ${timestamp}`;
+  }
+
+  return `Local bundle at ${timestamp}`;
 }
 
 export default function App() {
@@ -151,27 +217,50 @@ export default function App() {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const editorTitleInputRef = useRef<HTMLInputElement | null>(null);
   const editorModalRef = useRef<HTMLElement | null>(null);
+  const completedHandoffIdsRef = useRef<Set<string>>(new Set());
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const [status, setStatus] = useState('Start a clip from the popup or with the keyboard shortcut.');
   const [draftTitle, setDraftTitle] = useState('');
   const [draftNote, setDraftNote] = useState('');
-  const [bridgeWorkspaces, setBridgeWorkspaces] = useState<BridgeWorkspace[]>([]);
-  const [bridgeSessions, setBridgeSessions] = useState<BridgeSession[]>([]);
-  const [bridgeError, setBridgeError] = useState('');
-  const [bridgeBaseUrl, setBridgeBaseUrl] = useState('http://127.0.0.1:4311');
-  const [bridgeToken, setBridgeToken] = useState('snapclip-dev');
-  const [isBridgeLoading, setIsBridgeLoading] = useState(false);
-  const [isBridgeSubmitting, setIsBridgeSubmitting] = useState(false);
-  const [isSessionLoading, setIsSessionLoading] = useState(false);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
-  const [selectedSessionId, setSelectedSessionId] = useState('');
   const [handoffTarget, setHandoffTarget] = useState<HandoffTarget>('claude');
   const [handoffIntent, setHandoffIntent] = useState<HandoffIntent>('fix');
   const [handoffScope, setHandoffScope] = useState<HandoffScope>('active_clip');
   const [evidenceProfile, setEvidenceProfile] = useState<EvidenceProfile>('balanced');
-  const [handoffResult, setHandoffResult] = useState<HandoffResult | null>(null);
   const [activeOverlayTabId, setActiveOverlayTabId] = useState<number | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const bridgeReloadKey = session ? `${session.id}:${session.clips.length}` : 'no-session';
+  const {
+    bridgeWorkspaces,
+    bridgeSessions,
+    bridgeApprovals,
+    bridgeError,
+    bridgeBaseUrl,
+    bridgeToken,
+    isBridgeLoading,
+    isSessionLoading,
+    isApprovalLoading,
+    selectedWorkspaceId,
+    selectedSessionId,
+    setBridgeBaseUrl,
+    setBridgeToken,
+    setBridgeError,
+    setSelectedWorkspaceId,
+    setSelectedSessionId,
+    saveSettings: persistBridgeSettings,
+    refreshSessions: reloadBridgeSessions,
+    refreshApprovals,
+  } = useBridgeState({
+    enabled: Boolean(session?.clips.length),
+    reloadKey: bridgeReloadKey,
+  });
+  const {
+    activeTask: handoffTask,
+    handoffError,
+    isBridgeSubmitting,
+    setActiveTask: setHandoffTask,
+    setHandoffError,
+    submitTask: submitBridgeTask,
+  } = useBridgeHandoff();
 
   useEffect(() => {
     if (!session) {
@@ -194,13 +283,103 @@ export default function App() {
   const runtimeSummary = activeClip?.runtimeContext?.summary ?? null;
   const chromeDebugger = activeClip?.runtimeContext?.chromeDebugger ?? null;
   const selectedText = activeClip?.domSummary.selectedText?.trim() ?? '';
-  const handoffSummary = handoffResult
-    ? `${handoffResult.deliveryState.replaceAll('_', ' ')}${handoffResult.deliveryError ? `: ${handoffResult.deliveryError}` : ''}`
-    : bridgeError
-      ? bridgeError
+  const selectedWorkspace = bridgeWorkspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
+  const selectedBridgeSession = bridgeSessions.find((entry) => entry.id === selectedSessionId) ?? null;
+  const handoffSummary = handoffTask
+    ? handoffTask.delivery.state === 'delivering' && bridgeApprovals.length
+      ? `${bridgeApprovals.length} Claude approval${bridgeApprovals.length === 1 ? '' : 's'} waiting in the local bridge.`
+      : `${handoffTask.delivery.state.replaceAll('_', ' ')}${handoffTask.delivery.error ? `: ${handoffTask.delivery.error}` : ''}`
+    : handoffError || bridgeError
+      ? handoffError || bridgeError
       : selectedWorkspaceId
-        ? 'Creates a local bundle first, then delivers it if possible.'
+        ? handoffTarget === 'claude'
+          ? selectedBridgeSession
+            ? 'Creates a local bundle first, then delivers it into the selected Claude session.'
+            : bridgeSessions.length
+              ? 'Creates a local Claude bundle only. Choose a live Claude session above to send it directly.'
+              : 'Creates a local Claude bundle only. Start Claude locally and install hooks to unlock direct send.'
+          : handoffTarget === 'codex'
+            ? 'Creates a local Codex bundle you can paste or hand off manually.'
+            : 'Creates a local bundle only and keeps it on this machine.'
         : 'Connect the local bridge when you are ready to send.';
+  const modalHandoffLabel =
+    handoffTarget === 'claude'
+      ? selectedWorkspace
+        ? selectedBridgeSession
+          ? `Claude -> ${selectedWorkspace.name} -> ${selectedBridgeSession.label}`
+          : `Claude bundle -> ${selectedWorkspace.name}`
+        : 'Claude -> bridge not connected'
+      : handoffTarget === 'codex'
+        ? selectedWorkspace
+          ? `Codex bundle -> ${selectedWorkspace.name}`
+          : 'Codex bundle -> bridge not connected'
+        : selectedWorkspace
+          ? `Local bundle -> ${selectedWorkspace.name}`
+          : 'Local bundle -> bridge not connected';
+  const modalSendLabel = isBridgeSubmitting
+    ? 'Preparing...'
+    : handoffTarget === 'claude'
+      ? selectedBridgeSession
+        ? 'Send current clip'
+        : 'Create current bundle'
+      : handoffTarget === 'codex'
+        ? 'Prepare current clip'
+        : 'Create current bundle';
+
+  useEffect(() => {
+    if (!handoffTask || (handoffTask.delivery.state !== 'queued' && handoffTask.delivery.state !== 'delivering')) {
+      return;
+    }
+
+    setStatus(getHandoffStatusMessage(handoffTask, bridgeApprovals.length));
+  }, [bridgeApprovals.length, handoffTask?.delivery.error, handoffTask?.delivery.state, handoffTask?.id]);
+
+  useEffect(() => {
+    if (!selectedWorkspaceId || handoffTarget !== 'claude' || !handoffTask) {
+      return;
+    }
+
+    const syncApprovals = async () => {
+      const approvalSessionId = handoffTask.delivery.sessionId ?? selectedSessionId;
+      if (!approvalSessionId) {
+        await refreshApprovals(selectedWorkspaceId, '');
+        return;
+      }
+
+      try {
+        await refreshApprovals(selectedWorkspaceId, approvalSessionId);
+      } catch {
+        // Bridge polling failures should degrade to local state updates, not unhandled rejections.
+      }
+    };
+
+    if (handoffTask.delivery.state !== 'queued' && handoffTask.delivery.state !== 'delivering') {
+      void syncApprovals();
+      return;
+    }
+
+    void syncApprovals();
+    const intervalId = window.setInterval(() => {
+      void syncApprovals();
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    handoffTarget,
+    handoffTask?.delivery.sessionId,
+    handoffTask?.delivery.state,
+    handoffTask?.id,
+    selectedSessionId,
+    selectedWorkspaceId,
+  ]);
+
+  useEffect(() => {
+    if (handoffTarget !== 'claude' && selectedSessionId) {
+      setSelectedSessionId('');
+    }
+  }, [handoffTarget, selectedSessionId, setSelectedSessionId]);
 
   useEffect(() => {
     setDraftTitle(activeClip?.title ?? '');
@@ -221,153 +400,6 @@ export default function App() {
       window.clearTimeout(timeoutId);
     };
   }, [activeClip?.id, isEditorOpen]);
-
-  useEffect(() => {
-    if (!session || session.clips.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadBridgeState() {
-      setIsBridgeLoading(true);
-
-      try {
-        const config = await getBridgeConfig();
-        if (cancelled) {
-          return;
-        }
-
-        setBridgeBaseUrl(config.baseUrl);
-        setBridgeToken(config.token);
-        const workspaces = await listBridgeWorkspaces();
-        if (cancelled) {
-          return;
-        }
-
-        setBridgeWorkspaces(workspaces);
-        setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
-        setSelectedWorkspaceId((currentValue) => {
-          if (currentValue && workspaces.some((workspace) => workspace.id === currentValue)) {
-            return currentValue;
-          }
-
-          const withSessions = workspaces.find((workspace) => workspace.sessionCount > 0);
-          return withSessions?.id ?? workspaces[0]?.id ?? '';
-        });
-      } catch (error) {
-        if (!cancelled) {
-          setBridgeError(isBridgeReadyMessage(error));
-          setBridgeWorkspaces([]);
-          setSelectedWorkspaceId('');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsBridgeLoading(false);
-        }
-      }
-    }
-
-    void loadBridgeState();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.id, session?.clips.length]);
-
-  async function saveBridgeSettings() {
-    try {
-      const config = await setBridgeConfig({
-        baseUrl: bridgeBaseUrl,
-        token: bridgeToken,
-      });
-
-      setBridgeBaseUrl(config.baseUrl);
-      setBridgeToken(config.token);
-      setStatus('Bridge settings saved. Refreshing workspaces...');
-
-      const workspaces = await listBridgeWorkspaces();
-      setBridgeWorkspaces(workspaces);
-      setSelectedWorkspaceId((currentValue) => {
-        if (currentValue && workspaces.some((workspace) => workspace.id === currentValue)) {
-          return currentValue;
-        }
-
-        const withSessions = workspaces.find((workspace) => workspace.sessionCount > 0);
-        return withSessions?.id ?? workspaces[0]?.id ?? '';
-      });
-      setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
-    } catch (error) {
-      const message = isBridgeReadyMessage(error);
-      setBridgeError(message);
-      setStatus(message);
-    }
-  }
-
-  async function refreshBridgeSessions() {
-    if (!selectedWorkspaceId) {
-      return;
-    }
-
-    setIsSessionLoading(true);
-
-    try {
-      const sessionsForWorkspace = await listBridgeSessions(selectedWorkspaceId);
-      setBridgeSessions(sessionsForWorkspace);
-      setSelectedSessionId((currentValue) =>
-        currentValue && sessionsForWorkspace.some((entry) => entry.id === currentValue) ? currentValue : '',
-      );
-      setBridgeError('');
-    } catch (error) {
-      setBridgeError(isBridgeReadyMessage(error));
-    } finally {
-      setIsSessionLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!selectedWorkspaceId) {
-      setBridgeSessions([]);
-      setSelectedSessionId('');
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadSessions() {
-      setIsSessionLoading(true);
-
-      try {
-        const sessionsForWorkspace = await listBridgeSessions(selectedWorkspaceId);
-        if (cancelled) {
-          return;
-        }
-
-        setBridgeSessions(sessionsForWorkspace);
-        setSelectedSessionId((currentValue) =>
-          currentValue && sessionsForWorkspace.some((entry) => entry.id === currentValue)
-            ? currentValue
-            : '',
-        );
-      } catch (error) {
-        if (!cancelled) {
-          setBridgeSessions([]);
-          setSelectedSessionId('');
-          setBridgeError(isBridgeReadyMessage(error));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsSessionLoading(false);
-        }
-      }
-    }
-
-    void loadSessions();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -565,6 +597,18 @@ export default function App() {
     setStatus(response.ok ? 'Annotations saved.' : response.error);
   }
 
+  async function saveHandoffMetadata(clipId: string, handoff: ClipHandoffRecord) {
+    const response = (await chrome.runtime.sendMessage({
+      type: 'update-clip-handoff',
+      clipId,
+      handoff,
+    })) as SnapClipMessageResponse;
+
+    if (!response.ok) {
+      throw new Error(response.error || 'Failed to save handoff status locally.');
+    }
+  }
+
   async function copySessionReport(currentSession: ClipSession) {
     try {
       await copyTextToClipboard(createClipSessionMarkdown(currentSession));
@@ -606,7 +650,31 @@ export default function App() {
     }
   }
 
-  async function submitHandoff() {
+  async function saveBridgeSettings() {
+    try {
+      await persistBridgeSettings({
+        baseUrl: bridgeBaseUrl,
+        token: bridgeToken,
+      });
+      setStatus('Bridge settings saved.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save bridge settings.';
+      setBridgeError(message);
+      setStatus(message);
+    }
+  }
+
+  async function refreshBridgeSessions() {
+    try {
+      await reloadBridgeSessions();
+      setStatus('Bridge sessions refreshed.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to refresh Claude sessions.';
+      setStatus(message);
+    }
+  }
+
+  async function submitHandoff(scopeOverride: HandoffScope = handoffScope) {
     if (!session || !activeClip) {
       return;
     }
@@ -616,8 +684,8 @@ export default function App() {
       return;
     }
 
-    setIsBridgeSubmitting(true);
-    setHandoffResult(null);
+    setHandoffTask(null);
+    setHandoffError('');
     setBridgeError('');
     setStatus(
       handoffTarget === 'claude'
@@ -628,82 +696,70 @@ export default function App() {
     );
 
     try {
-      const screenshotBlob = await getClipAssetBlob(activeClip.imageAssetId);
-      if (!screenshotBlob) {
-        throw new Error('The current clip image could not be loaded from local storage.');
-      }
+      const handoffClipId = activeClip.id;
+      const handoffWorkspaceName = selectedWorkspace?.name ?? selectedWorkspaceId;
+      const requestedSessionLabel = selectedBridgeSession?.label ?? null;
+      const task = await submitBridgeTask(
+        await buildBridgeTaskRequest({
+          workspaceId: selectedWorkspaceId,
+          sessionId: handoffTarget === 'claude' && selectedSessionId ? selectedSessionId : null,
+          target: handoffTarget,
+          intent: handoffIntent,
+          scope: scopeOverride,
+          evidenceProfile,
+          activeClip,
+          session,
+          draftTitle,
+          draftNote,
+        }),
+      );
 
-      const annotatedBlob = await renderAnnotatedClipBlob(activeClip, screenshotBlob);
-      const artifacts = createClipBundleArtifacts({
-        scope: handoffScope,
-        target: handoffTarget,
-        intent: handoffIntent,
-        evidenceProfile,
-        activeClip: {
-          ...activeClip,
-          note: draftNote,
-        },
-        session: {
-          ...session,
-          clips: session.clips.map((clip) =>
-            clip.id === activeClip.id
-              ? {
-                  ...clip,
-                  note: draftNote,
-                }
-              : clip,
-          ),
-        },
-      });
-
-      const response = await createBridgeTask({
-        workspaceId: selectedWorkspaceId,
-        sessionId: handoffTarget === 'claude' && selectedSessionId ? selectedSessionId : null,
-        target: handoffTarget,
-        intent: handoffIntent,
-        payload: {
-          title: activeClip.title,
-          comment: draftNote.trim(),
-          mimeType: 'image/png',
-          imageBase64: await blobToBase64(screenshotBlob),
-          annotations: activeClip.annotations,
-          artifacts: {
-            screenshotFileName: 'screenshot.png',
-            screenshotBase64: await blobToBase64(screenshotBlob),
-            annotatedFileName: 'annotated.png',
-            annotatedBase64: await blobToBase64(annotatedBlob),
-            context: artifacts.context,
-            annotations: artifacts.annotations,
-            promptClaude: artifacts.promptClaude,
-            promptCodex: artifacts.promptCodex,
-          },
-        },
-      });
-
-      setHandoffResult({
-        taskId: response.taskId,
-        bundlePath: response.bundlePath,
-        deliveryState: response.delivery.state,
-        deliveryTarget: response.delivery.target,
-        deliveryError: response.delivery.error ?? null,
-        sessionId: response.delivery.sessionId,
-      });
-
-      setStatus(
-        response.delivery.state === 'delivered'
+      const statusMessage =
+        task.delivery.state === 'delivered'
           ? handoffTarget === 'claude'
             ? 'Incident packet delivered to Claude and preserved locally.'
             : 'Incident packet bundle created for Codex and preserved locally.'
-          : response.delivery.state === 'failed_after_bundle_creation'
+          : task.delivery.state === 'failed_after_bundle_creation'
             ? 'Delivery failed after bundle creation. The local incident packet was preserved.'
-            : 'Incident packet bundle created locally.',
-      );
+            : task.target === 'claude'
+              ? 'Claude incident bundle created locally.'
+              : task.target === 'codex'
+                ? 'Codex incident bundle created locally.'
+                : 'Incident packet bundle created locally.';
+
+      if (!completedHandoffIdsRef.current.has(task.id)) {
+        try {
+          await saveHandoffMetadata(handoffClipId, {
+            taskId: task.id,
+            target: task.target,
+            deliveryState: task.delivery.state,
+            deliveryTarget: task.delivery.target,
+            workspaceId: task.workspaceId,
+            workspaceName: handoffWorkspaceName,
+            sessionId: task.delivery.sessionId,
+            sessionLabel: task.delivery.sessionId ? requestedSessionLabel : null,
+            bundlePath: task.bundlePath,
+            error: task.delivery.error ?? null,
+            updatedAt: task.updatedAt,
+          });
+          completedHandoffIdsRef.current.add(task.id);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'The latest handoff status could not be saved back to this clip.';
+          setStatus(`${statusMessage} ${message}`);
+          return;
+        }
+      }
+
+      setStatus(statusMessage);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+
       const message = error instanceof Error ? error.message : 'LLM Clip could not create the incident packet.';
       setBridgeError(message);
       setStatus(message);
-    } finally {
-      setIsBridgeSubmitting(false);
     }
   }
 
@@ -852,6 +908,16 @@ export default function App() {
                         {activeClipHost} • {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @{' '}
                         {activeClip.page.viewport.dpr}x • Crop {activeClip.crop.width} x {activeClip.crop.height}
                       </p>
+                      {activeClip.lastHandoff ? (
+                        <div className="active-clip-handoff">
+                          <span
+                            className={`handoff-chip handoff-chip-${getClipHandoffTone(activeClip.lastHandoff)}`}
+                          >
+                            {getClipHandoffStateLabel(activeClip.lastHandoff)}
+                          </span>
+                          <p>{getClipHandoffSummary(activeClip.lastHandoff)}</p>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -984,13 +1050,15 @@ export default function App() {
                   <div className="handoff-actions">
                     <button
                       disabled={isBridgeLoading || isBridgeSubmitting || !selectedWorkspaceId}
-                      onClick={submitHandoff}
+                      onClick={() => void submitHandoff()}
                       type="button"
                     >
                       {isBridgeSubmitting
                         ? 'Preparing packet...'
                         : handoffTarget === 'claude'
-                          ? 'Send to Claude'
+                          ? selectedBridgeSession
+                            ? 'Send to Claude'
+                            : 'Create Claude bundle'
                           : handoffTarget === 'codex'
                             ? 'Prepare Codex bundle'
                             : 'Create local bundle'}
@@ -1082,23 +1150,27 @@ export default function App() {
                         </div>
                       </div>
 
-                      {handoffResult ? (
+                      {handoffTask ? (
                         <dl className="context-list">
                           <div>
                             <dt>Task ID</dt>
-                            <dd>{handoffResult.taskId}</dd>
+                            <dd>{handoffTask.id}</dd>
                           </div>
                           <div>
                             <dt>Bundle path</dt>
-                            <dd>{handoffResult.bundlePath}</dd>
+                            <dd>{handoffTask.bundlePath}</dd>
                           </div>
                           <div>
                             <dt>Delivery</dt>
-                            <dd>{handoffResult.deliveryTarget}</dd>
+                            <dd>{handoffTask.delivery.target}</dd>
+                          </div>
+                          <div>
+                            <dt>Status</dt>
+                            <dd>{handoffTask.status.replaceAll('_', ' ')}</dd>
                           </div>
                           <div>
                             <dt>Session</dt>
-                            <dd>{handoffResult.sessionId || 'Bundle only'}</dd>
+                            <dd>{handoffTask.delivery.sessionId || 'Bundle only'}</dd>
                           </div>
                         </dl>
                       ) : null}
@@ -1419,6 +1491,13 @@ export default function App() {
                       </label>
 
                       <div className="annotation-actions annotation-actions-editor">
+                        <button
+                          disabled={isBridgeLoading || isBridgeSubmitting || !selectedWorkspaceId}
+                          onClick={() => void submitHandoff('active_clip')}
+                          type="button"
+                        >
+                          {modalSendLabel}
+                        </button>
                         <button onClick={copyCurrentImage} type="button">
                           Copy image
                         </button>
@@ -1428,6 +1507,14 @@ export default function App() {
                         <button className="secondary" onClick={() => setIsEditorOpen(false)} type="button">
                           Done
                         </button>
+                      </div>
+
+                      <div className="clip-editor-handoff">
+                        <p className="eyebrow">Current handoff</p>
+                        <p className="clip-editor-handoff-label">{modalHandoffLabel}</p>
+                        <p className="clip-editor-handoff-copy">
+                          Uses the active bridge settings from the main workspace. {handoffSummary}
+                        </p>
                       </div>
 
                       <label className="field-block">

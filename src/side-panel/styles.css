@@ -327,7 +327,8 @@ select:focus-visible {
 }
 
 .mode-chip,
-.context-card-badge {
+.context-card-badge,
+.handoff-chip {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -349,6 +350,31 @@ select:focus-visible {
   color: var(--text-1);
 }
 
+.handoff-chip {
+  width: fit-content;
+  border: 1px solid rgba(154, 177, 205, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+}
+
+.handoff-chip-success {
+  border-color: rgba(108, 222, 157, 0.24);
+  background: rgba(108, 222, 157, 0.14);
+  color: #d7ffea;
+}
+
+.handoff-chip-warning {
+  border-color: rgba(255, 181, 104, 0.24);
+  background: rgba(255, 181, 104, 0.14);
+  color: #ffe4bf;
+}
+
+.handoff-chip-compact {
+  min-height: 24px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+
 .active-clip-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.9fr);
@@ -367,6 +393,18 @@ select:focus-visible {
 }
 
 .clip-meta-line {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.active-clip-handoff {
+  display: grid;
+  gap: 8px;
+}
+
+.active-clip-handoff p {
   margin: 0;
   color: var(--text-2);
   font-size: 13px;
@@ -414,7 +452,34 @@ select:focus-visible {
 
 .annotation-actions-editor {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clip-editor-handoff {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(154, 177, 205, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.clip-editor-handoff-label,
+.clip-editor-handoff-copy {
+  margin: 0;
+}
+
+.clip-editor-handoff-label {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.clip-editor-handoff-copy {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .meta-grid {
@@ -639,6 +704,12 @@ select:focus-visible {
 .clip-thumb-copy strong {
   font-size: 14px;
   line-height: 1.35;
+}
+
+.clip-thumb-handoff {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .handoff-grid {
