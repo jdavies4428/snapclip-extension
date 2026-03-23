@@ -176,6 +176,34 @@ export function normalizeRuntimeContext(
             .slice(0, limits.maxFields),
         }
       : null,
+    chromeDebugger: runtimeContext.chromeDebugger
+      ? {
+          ...runtimeContext.chromeDebugger,
+          currentUrl: redactUrlQuery(runtimeContext.chromeDebugger.currentUrl),
+          currentTitle: truncate(runtimeContext.chromeDebugger.currentTitle, 140),
+          attachError: runtimeContext.chromeDebugger.attachError
+            ? truncate(runtimeContext.chromeDebugger.attachError, 180)
+            : runtimeContext.chromeDebugger.attachError,
+          frames: runtimeContext.chromeDebugger.frames.slice(0, limits.maxFields).map((frame) => ({
+            ...frame,
+            url: redactUrlQuery(frame.url),
+            domainAndRegistry: frame.domainAndRegistry ? truncate(frame.domainAndRegistry, 80) : frame.domainAndRegistry,
+            unreachableUrl: frame.unreachableUrl ? redactUrlQuery(frame.unreachableUrl) : frame.unreachableUrl,
+          })),
+          logs: runtimeContext.chromeDebugger.logs.slice(0, limits.maxEvents).map((entry) => ({
+            ...entry,
+            text: truncate(entry.text, limits.maxEventMessageLength),
+            url: entry.url ? redactUrlQuery(entry.url) : entry.url,
+          })),
+          network: runtimeContext.chromeDebugger.network.slice(0, limits.maxNetwork).map((entry) => ({
+            ...entry,
+            url: redactUrlQuery(entry.url),
+            mimeType: entry.mimeType ? truncate(entry.mimeType, 60) : entry.mimeType,
+            failedReason: entry.failedReason ? truncate(entry.failedReason, limits.maxNetworkErrorLength) : entry.failedReason,
+            blockedReason: entry.blockedReason ? truncate(entry.blockedReason, limits.maxNetworkErrorLength) : entry.blockedReason,
+          })),
+        }
+      : null,
   };
 }
 

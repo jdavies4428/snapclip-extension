@@ -4,6 +4,24 @@ import { startClipWorkflow } from './clipping';
 import { getSupportedActiveTab } from './permissions';
 import { routeMessage } from './router';
 
+function normalizeLaunchError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Failed to start clipping.';
+
+  if (message.includes('site access request')) {
+    return message;
+  }
+
+  if (message.includes('Grant site access')) {
+    return message;
+  }
+
+  if (message.includes('Extension manifest must request permission to access this host')) {
+    return 'LLM Clip needs access to this site before it can clip. Approve the site access request and try again.';
+  }
+
+  return message;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: false })
@@ -19,6 +37,7 @@ chrome.commands.onCommand.addListener(async (command) => {
       await startClipWorkflow('region', {
         tabId: tab.id,
         windowId: tab.windowId,
+        interactive: true,
       });
     }
 
@@ -26,21 +45,29 @@ chrome.commands.onCommand.addListener(async (command) => {
       await startClipWorkflow('visible', {
         tabId: tab.id,
         windowId: tab.windowId,
+        interactive: true,
       });
     }
   } catch (error) {
     console.error('Failed to handle command', error);
+    const errorMessage = normalizeLaunchError(error);
     await chrome.storage.local.set({
-      [STORAGE_KEYS.lastLaunchError]:
-        error instanceof Error ? error.message : 'Failed to start clipping from the keyboard shortcut.',
+      [STORAGE_KEYS.lastLaunchError]: errorMessage,
     });
+    try {
+      const tab = await getSupportedActiveTab();
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    } catch {
+      // Ignore if the side panel cannot be opened here.
+    }
   }
 });
 
 chrome.runtime.onMessage.addListener((message: SnapClipMessage, _sender, sendResponse) => {
   if (
     message.type === 'offscreen-copy-text' ||
-    message.type === 'offscreen-copy-image'
+    message.type === 'offscreen-copy-image' ||
+    message.type === 'offscreen-copy-packet'
   ) {
     return false;
   }

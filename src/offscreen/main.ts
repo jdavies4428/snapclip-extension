@@ -1,5 +1,19 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 
+function buildPacketHtml(dataUrl: string, text: string): string {
+  const escapedText = text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+  return [
+    '<div>',
+    `<p><img src="${dataUrl}" alt="LLM Clip capture" /></p>`,
+    `<pre style="white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;">${escapedText}</pre>`,
+    '</div>',
+  ].join('');
+}
+
 async function copyTextWithFallback(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
@@ -72,6 +86,60 @@ async function copyImageWithFallback(dataUrl: string): Promise<void> {
   }
 }
 
+async function copyPacketWithFallback(dataUrl: string, text: string): Promise<void> {
+  const blob = await fetch(dataUrl).then(async (response) => response.blob());
+  const html = buildPacketHtml(dataUrl, text);
+
+  if ('ClipboardItem' in window && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob,
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        }),
+      ]);
+      return;
+    } catch {
+      // Fall back to execCommand copy below.
+    }
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.contentEditable = 'true';
+  wrapper.style.position = 'fixed';
+  wrapper.style.opacity = '0';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.left = '-9999px';
+  wrapper.style.top = '0';
+
+  const image = document.createElement('img');
+  image.src = dataUrl;
+  await image.decode().catch(() => undefined);
+  wrapper.append(image);
+
+  const pre = document.createElement('pre');
+  pre.textContent = text;
+  pre.style.whiteSpace = 'pre-wrap';
+  wrapper.append(pre);
+
+  document.body.append(wrapper);
+  wrapper.focus();
+
+  const range = document.createRange();
+  range.selectNodeContents(wrapper);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  const success = document.execCommand('copy');
+  selection?.removeAllRanges();
+  wrapper.remove();
+
+  if (!success) {
+    throw new Error('Packet copy failed in this browser context.');
+  }
+}
+
 chrome.runtime.onMessage.addListener((message: SnapClipMessage, _sender, sendResponse) => {
   if (message.type === 'offscreen-copy-text') {
     void copyTextWithFallback(message.text)
@@ -88,6 +156,16 @@ chrome.runtime.onMessage.addListener((message: SnapClipMessage, _sender, sendRes
       .then(() => sendResponse({ ok: true } satisfies SnapClipMessageResponse))
       .catch((error: unknown) => {
         const errorMessage = error instanceof Error ? error.message : 'Image copy failed.';
+        sendResponse({ ok: false, error: errorMessage } satisfies SnapClipMessageResponse);
+      });
+    return true;
+  }
+
+  if (message.type === 'offscreen-copy-packet') {
+    void copyPacketWithFallback(message.dataUrl, message.text)
+      .then(() => sendResponse({ ok: true } satisfies SnapClipMessageResponse))
+      .catch((error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : 'Packet copy failed.';
         sendResponse({ ok: false, error: errorMessage } satisfies SnapClipMessageResponse);
       });
     return true;

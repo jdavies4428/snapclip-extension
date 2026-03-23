@@ -20,6 +20,74 @@ function normalizeUrl(url?: string): URL | null {
   }
 }
 
+export function getOriginPermissionPattern(url: string): string | null {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  if (normalizedUrl.protocol !== 'http:' && normalizedUrl.protocol !== 'https:') {
+    return null;
+  }
+
+  return `${normalizedUrl.protocol}//${normalizedUrl.hostname}/*`;
+}
+
+export function getUrlHostLabel(url?: string): string {
+  const normalizedUrl = normalizeUrl(url);
+  return normalizedUrl?.hostname.replace(/^www\./, '') || 'this site';
+}
+
+export function isHostAccessError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes('Extension manifest must request permission to access this host') ||
+    message.includes('Cannot access contents of url') ||
+    message.includes('Missing host permission for the tab')
+  );
+}
+
+export async function requestTabHostAccess(
+  tab: chrome.tabs.Tab & { id: number },
+  options?: { interactive?: boolean },
+): Promise<'granted' | 'requested' | 'denied' | 'unsupported'> {
+  const originPattern = getOriginPermissionPattern(tab.url || '');
+  if (!originPattern) {
+    return 'unsupported';
+  }
+
+  const hasAccess = await chrome.permissions.contains({ origins: [originPattern] });
+  if (hasAccess) {
+    return 'granted';
+  }
+
+  if (options?.interactive) {
+    try {
+      const granted = await chrome.permissions.request({ origins: [originPattern] });
+      if (granted) {
+        return 'granted';
+      }
+    } catch {
+      // Fall through to the tab-scoped host access request below.
+    }
+  }
+
+  if (typeof chrome.permissions.addHostAccessRequest === 'function') {
+    try {
+      await chrome.permissions.addHostAccessRequest({
+        tabId: tab.id,
+        pattern: originPattern,
+      });
+      return 'requested';
+    } catch {
+      // Ignore and fall through to denied.
+    }
+  }
+
+  return 'denied';
+}
+
 export function assertSupportedTab(tab?: chrome.tabs.Tab): asserts tab is chrome.tabs.Tab & { id: number } {
   if (!tab || typeof tab.id !== 'number') {
     throw new Error('No active tab was found.');

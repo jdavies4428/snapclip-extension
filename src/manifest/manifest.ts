@@ -5,7 +5,7 @@ export default defineManifest({
   name: 'LLM Clip',
   description: 'Current-tab capture and AI-first context packaging for Chrome.',
   version: '0.1.0',
-  permissions: ['activeTab', 'scripting', 'storage', 'downloads', 'sidePanel', 'tabs', 'offscreen', 'clipboardWrite'],
+  permissions: ['activeTab', 'scripting', 'storage', 'downloads', 'sidePanel', 'tabs', 'offscreen', 'clipboardWrite', 'debugger'],
   host_permissions: ['http://127.0.0.1:4311/*', 'http://localhost:4311/*'],
   optional_host_permissions: ['http://*/*', 'https://*/*'],
   action: {

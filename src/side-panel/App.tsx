@@ -42,6 +42,14 @@ function isBridgeReadyMessage(error: unknown): string {
   return 'LLM Clip could not reach the local handoff bridge.';
 }
 
+function getHostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 async function ensureOffscreenDocument() {
   try {
     await chrome.offscreen.createDocument({
@@ -182,6 +190,17 @@ export default function App() {
     return session.clips.find((clip) => clip.id === activeClipId) ?? session.clips.at(-1) ?? null;
   }, [activeClipId, session]);
   const activeClipImageUrl = useClipAssetUrl(activeClip?.imageAssetId ?? null);
+  const activeClipHost = useMemo(() => (activeClip ? getHostLabel(activeClip.page.url) : ''), [activeClip]);
+  const runtimeSummary = activeClip?.runtimeContext?.summary ?? null;
+  const chromeDebugger = activeClip?.runtimeContext?.chromeDebugger ?? null;
+  const selectedText = activeClip?.domSummary.selectedText?.trim() ?? '';
+  const handoffSummary = handoffResult
+    ? `${handoffResult.deliveryState.replaceAll('_', ' ')}${handoffResult.deliveryError ? `: ${handoffResult.deliveryError}` : ''}`
+    : bridgeError
+      ? bridgeError
+      : selectedWorkspaceId
+        ? 'Creates a local bundle first, then delivers it if possible.'
+        : 'Connect the local bridge when you are ready to send.';
 
   useEffect(() => {
     setDraftTitle(activeClip?.title ?? '');
@@ -461,57 +480,11 @@ export default function App() {
       : null;
   }
 
-  function getOriginPermissionPattern(url: string): string | null {
-    let parsedUrl: URL;
-
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      return null;
-    }
-
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      return null;
-    }
-
-    return `${parsedUrl.protocol}//${parsedUrl.hostname}/*`;
-  }
-
-  async function ensurePanelCaptureAccess(tabUrl: string): Promise<boolean> {
-    const originPattern = getOriginPermissionPattern(tabUrl);
-    if (!originPattern) {
-      setStatus('LLM Clip only works on normal web pages. Browser pages, extension pages, Chrome Web Store, and PDFs are unsupported.');
-      return false;
-    }
-
-    const hasAccess = await chrome.permissions.contains({ origins: [originPattern] });
-    if (hasAccess) {
-      return true;
-    }
-
-    setStatus(`Requesting access to ${new URL(tabUrl).hostname} so LLM Clip can clip directly from the side panel...`);
-    const granted = await chrome.permissions.request({ origins: [originPattern] });
-    if (!granted) {
-      setStatus(
-        `LLM Clip needs access to ${new URL(tabUrl).hostname} to start captures from the side panel. You can still use the popup or keyboard shortcut.`,
-      );
-      return false;
-    }
-
-    setStatus(`Access granted for ${new URL(tabUrl).hostname}. Starting capture...`);
-    return true;
-  }
-
   async function startClip(clipMode: 'visible' | 'region') {
     try {
       const tab = await resolveCaptureTargetTab();
       if (typeof tab?.id !== 'number' || typeof tab.windowId !== 'number' || !tab.url) {
         setStatus('LLM Clip only works on normal web pages. Browser pages, extension pages, Chrome Web Store, and PDFs are unsupported.');
-        return;
-      }
-
-      const hasAccess = await ensurePanelCaptureAccess(tab.url);
-      if (!hasAccess) {
         return;
       }
 
@@ -826,22 +799,10 @@ export default function App() {
       <div className="panel-frame">
         <header className="panel-header">
           <div className="panel-header-copy">
-            <div className="panel-brand-row">
-              <div aria-hidden="true" className="panel-brand-mark">
-                LC
-              </div>
-              <div>
-                <p className="eyebrow">LLM Clip</p>
-                <p className="panel-label">Local incident workspace</p>
-              </div>
-            </div>
-
             <div className="panel-heading-block">
-              <h1>Capture once. Hand off clean evidence.</h1>
-              <p className="subtitle">
-                Clip the current tab, annotate the exact problem area, and package a deterministic local bundle for
-                Claude or Codex.
-              </p>
+              <p className="eyebrow">LLM Clip</p>
+              <h1>Workspace</h1>
+              <p className="subtitle">Capture, annotate, export.</p>
             </div>
           </div>
 
@@ -859,7 +820,6 @@ export default function App() {
           <p aria-live="polite" className="status-banner" role="status">
             {status}
           </p>
-          <p className="trust-copy">Stored locally until you export or send a bundle.</p>
         </div>
 
         {isLoading ? (
@@ -888,15 +848,10 @@ export default function App() {
                         <span className="mode-chip">{activeClip.clipMode}</span>
                       </div>
                       <p className="subtitle">{activeClip.page.title}</p>
-                    </div>
-
-                    <div className="hero-meta-pills">
-                      <span className="meta-pill">
-                        {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @ {activeClip.page.viewport.dpr}x
-                      </span>
-                      <span className="meta-pill">
-                        Crop {activeClip.crop.width} x {activeClip.crop.height}
-                      </span>
+                      <p className="clip-meta-line">
+                        {activeClipHost} • {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @{' '}
+                        {activeClip.page.viewport.dpr}x • Crop {activeClip.crop.width} x {activeClip.crop.height}
+                      </p>
                     </div>
                   </div>
 
@@ -914,13 +869,6 @@ export default function App() {
                           <div className="screenshot-preview screenshot-preview-loading">Loading clip preview...</div>
                         )}
                       </button>
-
-                      <div className="preview-note">
-                        <span className="editor-launch-hint">Open editor</span>
-                        <p className="preview-caption">
-                          Add text, box, and arrow annotations without leaving the workspace.
-                        </p>
-                      </div>
                     </div>
 
                     <div className="active-clip-sidebar">
@@ -934,32 +882,7 @@ export default function App() {
                         <button className="secondary" onClick={copyCurrentInstructions} type="button">
                           Copy prompt
                         </button>
-                        <button className="secondary" onClick={() => startClip('visible')} type="button">
-                          Save and clip visible
-                        </button>
-                        <button className="secondary" onClick={() => startClip('region')} type="button">
-                          Save and clip area
-                        </button>
                       </div>
-
-                      <dl className="meta-grid meta-grid-compact">
-                        <div>
-                          <dt>Source page</dt>
-                          <dd>{activeClip.page.url}</dd>
-                        </div>
-                        <div>
-                          <dt>Viewport</dt>
-                          <dd>
-                            {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @ {activeClip.page.viewport.dpr}x
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Clip area</dt>
-                          <dd>
-                            {activeClip.crop.width} x {activeClip.crop.height} at {activeClip.crop.x}, {activeClip.crop.y}
-                          </dd>
-                        </div>
-                      </dl>
 
                       <label className="field-block prompt-block">
                         <span>Prompt for the LLM</span>
@@ -971,9 +894,440 @@ export default function App() {
                           value={draftNote}
                         />
                       </label>
+
+                      <details className="panel-disclosure">
+                        <summary>Clip details</summary>
+                        <div className="panel-disclosure-body">
+                          <dl className="meta-grid meta-grid-compact">
+                            <div>
+                              <dt>Source page</dt>
+                              <dd>{activeClip.page.url}</dd>
+                            </div>
+                            <div>
+                              <dt>Viewport</dt>
+                              <dd>
+                                {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @{' '}
+                                {activeClip.page.viewport.dpr}x
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Clip area</dt>
+                              <dd>
+                                {activeClip.crop.width} x {activeClip.crop.height} at {activeClip.crop.x}, {activeClip.crop.y}
+                              </dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </details>
                     </div>
                   </div>
                 </article>
+
+                <section className="handoff-card">
+                  <div className="handoff-card-head">
+                    <div>
+                      <p className="eyebrow">AI handoff</p>
+                      <h2>Send bundle</h2>
+                    </div>
+                  </div>
+
+                  <div className="handoff-grid handoff-grid-primary">
+                    <label className="field-block">
+                      <span>Target</span>
+                      <select
+                        disabled={isBridgeSubmitting}
+                        onChange={(event) => setHandoffTarget(event.target.value as HandoffTarget)}
+                        value={handoffTarget}
+                      >
+                        <option value="claude">Claude</option>
+                        <option value="codex">Codex</option>
+                        <option value="export_only">Export only</option>
+                      </select>
+                    </label>
+                    <label className="field-block">
+                      <span>Workspace</span>
+                      <select
+                        disabled={isBridgeLoading || isBridgeSubmitting || bridgeWorkspaces.length === 0}
+                        onChange={(event) => setSelectedWorkspaceId(event.target.value)}
+                        value={selectedWorkspaceId}
+                      >
+                        {bridgeWorkspaces.length ? (
+                          bridgeWorkspaces.map((workspace) => (
+                            <option key={workspace.id} value={workspace.id}>
+                              {workspace.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">Bridge unavailable</option>
+                        )}
+                      </select>
+                    </label>
+                    {handoffTarget === 'claude' ? (
+                      <label className="field-block field-block-wide">
+                        <span>Claude session</span>
+                        <select
+                          disabled={isSessionLoading || isBridgeSubmitting || !selectedWorkspaceId}
+                          onChange={(event) => setSelectedSessionId(event.target.value)}
+                          value={selectedSessionId}
+                        >
+                          <option value="">Create bundle only</option>
+                          {bridgeSessions.map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+
+                  <div className="handoff-actions">
+                    <button
+                      disabled={isBridgeLoading || isBridgeSubmitting || !selectedWorkspaceId}
+                      onClick={submitHandoff}
+                      type="button"
+                    >
+                      {isBridgeSubmitting
+                        ? 'Preparing packet...'
+                        : handoffTarget === 'claude'
+                          ? 'Send to Claude'
+                          : handoffTarget === 'codex'
+                            ? 'Prepare Codex bundle'
+                            : 'Create local bundle'}
+                    </button>
+                    {handoffTarget === 'claude' ? (
+                      <button
+                        className="secondary"
+                        disabled={isSessionLoading || isBridgeSubmitting || !selectedWorkspaceId}
+                        onClick={() => void refreshBridgeSessions()}
+                        type="button"
+                      >
+                        Refresh sessions
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <p className="handoff-note">{handoffSummary}</p>
+
+                  <details className="panel-disclosure">
+                    <summary>Advanced handoff</summary>
+                    <div className="panel-disclosure-body">
+                      <div className="handoff-grid">
+                        <label className="field-block">
+                          <span>Scope</span>
+                          <select
+                            disabled={isBridgeSubmitting}
+                            onChange={(event) => setHandoffScope(event.target.value as HandoffScope)}
+                            value={handoffScope}
+                          >
+                            <option value="active_clip">Active clip</option>
+                            <option value="session">Whole session</option>
+                          </select>
+                        </label>
+                        <label className="field-block">
+                          <span>Intent</span>
+                          <select
+                            disabled={isBridgeSubmitting}
+                            onChange={(event) => setHandoffIntent(event.target.value as HandoffIntent)}
+                            value={handoffIntent}
+                          >
+                            <option value="fix">Investigate and fix</option>
+                            <option value="plan">Plan next steps</option>
+                            <option value="explain">Explain the issue</option>
+                          </select>
+                        </label>
+                        <label className="field-block">
+                          <span>Evidence</span>
+                          <select
+                            disabled={isBridgeSubmitting}
+                            onChange={(event) => setEvidenceProfile(event.target.value as EvidenceProfile)}
+                            value={evidenceProfile}
+                          >
+                            <option value="lean">Lean</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="full">Full</option>
+                          </select>
+                        </label>
+                        <label className="field-block">
+                          <span>Bridge URL</span>
+                          <input
+                            className="field-input"
+                            disabled={isBridgeLoading || isBridgeSubmitting}
+                            onChange={(event) => setBridgeBaseUrl(event.target.value)}
+                            placeholder="http://127.0.0.1:4311"
+                            type="text"
+                            value={bridgeBaseUrl}
+                          />
+                        </label>
+                        <label className="field-block">
+                          <span>Bridge token</span>
+                          <input
+                            className="field-input"
+                            disabled={isBridgeLoading || isBridgeSubmitting}
+                            onChange={(event) => setBridgeToken(event.target.value)}
+                            placeholder="snapclip-dev"
+                            type="text"
+                            value={bridgeToken}
+                          />
+                        </label>
+                        <div className="field-block field-block-wide">
+                          <button
+                            className="secondary"
+                            disabled={isBridgeLoading || isBridgeSubmitting}
+                            onClick={() => void saveBridgeSettings()}
+                            type="button"
+                          >
+                            Save bridge settings
+                          </button>
+                        </div>
+                      </div>
+
+                      {handoffResult ? (
+                        <dl className="context-list">
+                          <div>
+                            <dt>Task ID</dt>
+                            <dd>{handoffResult.taskId}</dd>
+                          </div>
+                          <div>
+                            <dt>Bundle path</dt>
+                            <dd>{handoffResult.bundlePath}</dd>
+                          </div>
+                          <div>
+                            <dt>Delivery</dt>
+                            <dd>{handoffResult.deliveryTarget}</dd>
+                          </div>
+                          <div>
+                            <dt>Session</dt>
+                            <dd>{handoffResult.sessionId || 'Bundle only'}</dd>
+                          </div>
+                        </dl>
+                      ) : null}
+
+                      <p className="evidence-copy">{describeEvidenceProfile(evidenceProfile)}</p>
+                    </div>
+                  </details>
+                </section>
+
+                <section className="session-context-shell">
+                  <div className="section-head section-head-compact">
+                    <div>
+                      <p className="eyebrow">Captured context</p>
+                      <h2>Context</h2>
+                    </div>
+                    <span className="context-card-badge">
+                      {runtimeSummary ? `${runtimeSummary.eventCount} events` : 'Optional'}
+                    </span>
+                  </div>
+
+                  <p className={`context-summary-line ${selectedText ? '' : 'context-summary-line-muted'}`}>
+                    {selectedText || 'No selected text was captured for this clip.'}
+                  </p>
+
+                  <details className="panel-disclosure">
+                    <summary>Show details</summary>
+                    <div className="panel-disclosure-body">
+                      {activeClip.domSummary.headings.length ? (
+                        <div className="panel-disclosure-stack">
+                          <p className="panel-disclosure-label">Visible headings</p>
+                          <ul className="pill-list">
+                            {activeClip.domSummary.headings.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      <dl className="meta-grid meta-grid-compact">
+                        <div>
+                          <dt>Page</dt>
+                          <dd>{activeClip.page.url}</dd>
+                        </div>
+                        <div>
+                          <dt>Browser</dt>
+                          <dd>{activeClip.page.userAgent}</dd>
+                        </div>
+                        <div>
+                          <dt>Platform</dt>
+                          <dd>{activeClip.page.platform}</dd>
+                        </div>
+                        <div>
+                          <dt>Language</dt>
+                          <dd>{activeClip.page.language}</dd>
+                        </div>
+                      </dl>
+
+                      {activeClip.runtimeContext?.events.length ? (
+                        <div className="panel-disclosure-stack">
+                          <p className="panel-disclosure-label">Recent runtime events</p>
+                          <div className="runtime-event-list">
+                            {activeClip.runtimeContext.events.map((event) => (
+                              <article
+                                className={`runtime-event runtime-event-${event.level}`}
+                                key={`${event.timestamp}-${event.type}-${event.message}`}
+                              >
+                                <div className="runtime-event-head">
+                                  <span className="runtime-event-badge">{event.type.replaceAll('_', ' ')}</span>
+                                  <time>{new Date(event.timestamp).toLocaleTimeString()}</time>
+                                </div>
+                                <p>{event.message}</p>
+                                {event.source ? <code>{event.source}</code> : null}
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {activeClip.runtimeContext?.network.length ? (
+                        <div className="panel-disclosure-stack">
+                          <p className="panel-disclosure-label">Network requests</p>
+                          <div className="runtime-event-list">
+                            {activeClip.runtimeContext.network.map((request) => (
+                              <article
+                                className={`runtime-event runtime-event-${
+                                  request.classification === 'failed'
+                                    ? 'error'
+                                    : request.classification === 'slow'
+                                      ? 'warn'
+                                      : 'log'
+                                }`}
+                                key={request.id}
+                              >
+                                <div className="runtime-event-head">
+                                  <span className="runtime-event-badge">
+                                    {request.transport} {request.method}
+                                  </span>
+                                  <time>{request.durationMs}ms</time>
+                                </div>
+                                <p>{request.url}</p>
+                                <code>
+                                  status {request.status === null ? 'no-status' : request.status} · {request.classification}
+                                </code>
+                                {request.error ? <code>{request.error}</code> : null}
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {activeClip.runtimeContext?.domSummary ? (
+                        <div className="panel-disclosure-stack">
+                          <p className="panel-disclosure-label">Visible page summary</p>
+                          <div className="dom-summary-grid">
+                            <div>
+                              <dt>Path</dt>
+                              <dd>{activeClip.runtimeContext.domSummary.path}</dd>
+                            </div>
+                            <div>
+                              <dt>Headings</dt>
+                              <dd>{activeClip.runtimeContext.domSummary.headingTexts.join(', ') || 'None captured'}</dd>
+                            </div>
+                            <div>
+                              <dt>Buttons</dt>
+                              <dd>{activeClip.runtimeContext.domSummary.buttonTexts.join(', ') || 'None captured'}</dd>
+                            </div>
+                            <div>
+                              <dt>Fields</dt>
+                              <dd>{activeClip.runtimeContext.domSummary.inputLabels.join(', ') || 'None captured'}</dd>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {chromeDebugger ? (
+                        <div className="panel-disclosure-stack">
+                          <p className="panel-disclosure-label">Chrome debugger snapshot</p>
+                          <dl className="meta-grid meta-grid-compact">
+                            <div>
+                              <dt>Status</dt>
+                              <dd>{chromeDebugger.attachError || 'Captured'}</dd>
+                            </div>
+                            <div>
+                              <dt>Frames</dt>
+                              <dd>{chromeDebugger.frameCount}</dd>
+                            </div>
+                            <div>
+                              <dt>DOM nodes</dt>
+                              <dd>
+                                {typeof chromeDebugger.performance.nodes === 'number'
+                                  ? chromeDebugger.performance.nodes.toLocaleString()
+                                  : 'n/a'}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Heap used</dt>
+                              <dd>
+                                {typeof chromeDebugger.performance.jsHeapUsedSize === 'number'
+                                  ? `${Math.round(chromeDebugger.performance.jsHeapUsedSize / 1024).toLocaleString()} KB`
+                                  : 'n/a'}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Chrome logs</dt>
+                              <dd>{chromeDebugger.logs.length}</dd>
+                            </div>
+                            <div>
+                              <dt>Chrome requests</dt>
+                              <dd>{chromeDebugger.network.length}</dd>
+                            </div>
+                          </dl>
+
+                          {chromeDebugger.logs.length ? (
+                            <div className="runtime-event-list">
+                              {chromeDebugger.logs.map((entry, index) => (
+                                <article
+                                  className={`runtime-event runtime-event-${
+                                    entry.level === 'error'
+                                      ? 'error'
+                                      : entry.level === 'warning' || entry.level === 'warn'
+                                        ? 'warn'
+                                        : 'log'
+                                  }`}
+                                  key={`${entry.timestamp ?? index}-${entry.source}-${entry.text}`}
+                                >
+                                  <div className="runtime-event-head">
+                                    <span className="runtime-event-badge">
+                                      {entry.source} {entry.level}
+                                    </span>
+                                    <time>
+                                      {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'snapshot'}
+                                    </time>
+                                  </div>
+                                  <p>{entry.text}</p>
+                                  {entry.url ? <code>{entry.url}</code> : null}
+                                </article>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {chromeDebugger.network.length ? (
+                            <div className="runtime-event-list">
+                              {chromeDebugger.network.map((request) => (
+                                <article
+                                  className={`runtime-event runtime-event-${
+                                    request.failedReason || request.blockedReason || request.status === null ? 'error' : 'log'
+                                  }`}
+                                  key={request.id}
+                                >
+                                  <div className="runtime-event-head">
+                                    <span className="runtime-event-badge">
+                                      {request.resourceType ? `${request.method} ${request.resourceType}` : request.method}
+                                    </span>
+                                    <time>{typeof request.status === 'number' ? request.status : 'ERR'}</time>
+                                  </div>
+                                  <p>{request.url}</p>
+                                  <code>
+                                    {[request.mimeType, request.failedReason, request.blockedReason].filter(Boolean).join(' · ') ||
+                                      'Chrome debugger snapshot'}
+                                  </code>
+                                </article>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </details>
+                </section>
               </section>
 
               <aside className="workspace-rail">
@@ -1000,33 +1354,23 @@ export default function App() {
                       />
                     ))}
                   </div>
-                </section>
-
-                <section className="local-trust-card">
-                  <div className="section-head section-head-compact">
-                    <div>
-                      <p className="eyebrow">Local-first</p>
-                      <h2>Bundle control</h2>
+                  <details className="panel-disclosure">
+                    <summary>Session tools</summary>
+                    <div className="panel-disclosure-body disclosure-actions">
+                      <button className="secondary" onClick={() => copySessionReport(session)} type="button">
+                        Copy all for Claude
+                      </button>
+                      <button className="secondary" onClick={() => exportSession('json')} type="button">
+                        Export JSON
+                      </button>
+                      <button className="secondary" onClick={() => exportSession('markdown')} type="button">
+                        Export Markdown
+                      </button>
+                      <button className="secondary" onClick={openPanelAgain} type="button">
+                        Keep panel open
+                      </button>
                     </div>
-                    <span className="context-card-badge">Session tools</span>
-                  </div>
-                  <p className="subtitle">
-                    Review, copy, or export the session without leaving the local workspace.
-                  </p>
-                  <div className="trust-actions">
-                    <button className="secondary" onClick={() => copySessionReport(session)} type="button">
-                      Copy all for Claude
-                    </button>
-                    <button className="secondary" onClick={() => exportSession('json')} type="button">
-                      Export JSON
-                    </button>
-                    <button className="secondary" onClick={() => exportSession('markdown')} type="button">
-                      Export Markdown
-                    </button>
-                    <button className="secondary" onClick={openPanelAgain} type="button">
-                      Keep panel open
-                    </button>
-                  </div>
+                  </details>
                 </section>
               </aside>
             </section>
@@ -1101,427 +1445,14 @@ export default function App() {
                 </section>
               </div>
             ) : null}
-
-            <section className="analysis-layout">
-              <section className="analysis-main">
-                <section className="session-context-shell">
-                  <div className="section-head">
-                    <div>
-                      <p className="eyebrow">Session context</p>
-                      <h2>What this selected clip carries</h2>
-                    </div>
-                    <span className="context-card-badge">{activeClip.title || 'Selected clip'}</span>
-                  </div>
-
-                  <div className="evidence-highlight-grid">
-                    <article className="selected-text-callout">
-                      <p className="eyebrow">Selected text</p>
-                      <p className="selected-text-copy">
-                        {activeClip.domSummary.selectedText || 'No selected text found on clip.'}
-                      </p>
-                    </article>
-
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Visible headings</h3>
-                        <span className="context-card-badge">
-                          {activeClip.domSummary.headings.length
-                            ? `${activeClip.domSummary.headings.length} captured`
-                            : 'None captured'}
-                        </span>
-                      </div>
-                      <ul className="pill-list">
-                        {(activeClip.domSummary.headings.length ? activeClip.domSummary.headings : ['None captured']).map(
-                          (item) => (
-                            <li key={item}>{item}</li>
-                          ),
-                        )}
-                      </ul>
-                    </article>
-                  </div>
-
-                  <section className="context-grid">
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Page metadata</h3>
-                        <span className="context-card-badge">
-                          {activeClip.runtimeContext?.summary.lastSeenAt
-                            ? `Last seen ${new Date(activeClip.runtimeContext.summary.lastSeenAt).toLocaleTimeString()}`
-                            : 'No runtime heartbeat'}
-                        </span>
-                      </div>
-                      <dl className="context-list">
-                        <div>
-                          <dt>Title</dt>
-                          <dd>{activeClip.page.title}</dd>
-                        </div>
-                        <div>
-                          <dt>URL</dt>
-                          <dd>{activeClip.page.url}</dd>
-                        </div>
-                        <div>
-                          <dt>Viewport</dt>
-                          <dd>
-                            {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @ {activeClip.page.viewport.dpr}x
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Browser</dt>
-                          <dd>{activeClip.page.userAgent}</dd>
-                        </div>
-                        <div>
-                          <dt>Platform</dt>
-                          <dd>{activeClip.page.platform}</dd>
-                        </div>
-                        <div>
-                          <dt>Language</dt>
-                          <dd>{activeClip.page.language}</dd>
-                        </div>
-                        <div>
-                          <dt>Time zone</dt>
-                          <dd>{activeClip.page.timeZone}</dd>
-                        </div>
-                      </dl>
-                    </article>
-
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Recent runtime events</h3>
-                        <span className="context-card-badge">
-                          {activeClip.runtimeContext
-                            ? `${activeClip.runtimeContext.summary.eventCount} captured`
-                            : 'Not captured'}
-                        </span>
-                      </div>
-                      {activeClip.runtimeContext?.events.length ? (
-                        <div className="runtime-event-list">
-                          {activeClip.runtimeContext.events.map((event) => (
-                            <article
-                              className={`runtime-event runtime-event-${event.level}`}
-                              key={`${event.timestamp}-${event.type}-${event.message}`}
-                            >
-                              <div className="runtime-event-head">
-                                <span className="runtime-event-badge">{event.type.replaceAll('_', ' ')}</span>
-                                <time>{new Date(event.timestamp).toLocaleTimeString()}</time>
-                              </div>
-                              <p>{event.message}</p>
-                              {event.source ? <code>{event.source}</code> : null}
-                            </article>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="evidence-copy">No runtime issues have been captured yet.</p>
-                      )}
-                    </article>
-
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Network requests</h3>
-                        <span className="context-card-badge">
-                          {activeClip.runtimeContext
-                            ? `${activeClip.runtimeContext.summary.failedRequestCount} failed • ${activeClip.runtimeContext.summary.slowRequestCount} slow`
-                            : 'Not captured'}
-                        </span>
-                      </div>
-                      {activeClip.runtimeContext?.network.length ? (
-                        <div className="runtime-event-list">
-                          {activeClip.runtimeContext.network.map((request) => (
-                            <article
-                              className={`runtime-event runtime-event-${
-                                request.classification === 'failed'
-                                  ? 'error'
-                                  : request.classification === 'slow'
-                                    ? 'warn'
-                                    : 'log'
-                              }`}
-                              key={request.id}
-                            >
-                              <div className="runtime-event-head">
-                                <span className="runtime-event-badge">
-                                  {request.transport} {request.method}
-                                </span>
-                                <time>{request.durationMs}ms</time>
-                              </div>
-                              <p>{request.url}</p>
-                              <code>
-                                status {request.status === null ? 'no-status' : request.status} · {request.classification}
-                              </code>
-                              {request.error ? <code>{request.error}</code> : null}
-                            </article>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="evidence-copy">No failed or slow requests have been captured yet.</p>
-                      )}
-                    </article>
-
-                    <article className="context-card context-card-full">
-                      <div className="context-card-head">
-                        <h3>Visible page summary</h3>
-                        <span className="context-card-badge">
-                          {activeClip.runtimeContext?.summary.hasDomSummary ? 'DOM summary ready' : 'No DOM summary'}
-                        </span>
-                      </div>
-                      {activeClip.runtimeContext?.domSummary ? (
-                        <div className="dom-summary-grid">
-                          <div>
-                            <dt>Path</dt>
-                            <dd>{activeClip.runtimeContext.domSummary.path}</dd>
-                          </div>
-                          <div>
-                            <dt>Headings</dt>
-                            <dd>{activeClip.runtimeContext.domSummary.headingTexts.join(', ') || 'None captured'}</dd>
-                          </div>
-                          <div>
-                            <dt>Buttons</dt>
-                            <dd>{activeClip.runtimeContext.domSummary.buttonTexts.join(', ') || 'None captured'}</dd>
-                          </div>
-                          <div>
-                            <dt>Fields</dt>
-                            <dd>{activeClip.runtimeContext.domSummary.inputLabels.join(', ') || 'None captured'}</dd>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="evidence-copy">No visible page summary has been captured for this clip yet.</p>
-                      )}
-                    </article>
-                  </section>
-                </section>
-              </section>
-
-              <aside className="analysis-rail">
-                <section className="handoff-card">
-                  <div className="handoff-card-head">
-                    <div>
-                      <p className="eyebrow">AI handoff</p>
-                      <h2>Send a real incident packet</h2>
-                    </div>
-                    <span className="context-card-badge">
-                      {handoffScope === 'session' ? `${session.clips.length} clips in packet` : 'Active clip only'}
-                    </span>
-                  </div>
-                  <p className="subtitle">
-                    LLM Clip writes a deterministic local bundle, then optionally delivers it through the local bridge.
-                  </p>
-
-                  <div className="handoff-grid">
-                    <label className="field-block">
-                      <span>Target</span>
-                      <select
-                        disabled={isBridgeSubmitting}
-                        onChange={(event) => setHandoffTarget(event.target.value as HandoffTarget)}
-                        value={handoffTarget}
-                      >
-                        <option value="claude">Claude</option>
-                        <option value="codex">Codex</option>
-                        <option value="export_only">Export only</option>
-                      </select>
-                    </label>
-                    <label className="field-block">
-                      <span>Scope</span>
-                      <select
-                        disabled={isBridgeSubmitting}
-                        onChange={(event) => setHandoffScope(event.target.value as HandoffScope)}
-                        value={handoffScope}
-                      >
-                        <option value="active_clip">Active clip</option>
-                        <option value="session">Whole session</option>
-                      </select>
-                    </label>
-                    <label className="field-block">
-                      <span>Intent</span>
-                      <select
-                        disabled={isBridgeSubmitting}
-                        onChange={(event) => setHandoffIntent(event.target.value as HandoffIntent)}
-                        value={handoffIntent}
-                      >
-                        <option value="fix">Investigate and fix</option>
-                        <option value="plan">Plan next steps</option>
-                        <option value="explain">Explain the issue</option>
-                      </select>
-                    </label>
-                    <label className="field-block">
-                      <span>Evidence profile</span>
-                      <select
-                        disabled={isBridgeSubmitting}
-                        onChange={(event) => setEvidenceProfile(event.target.value as EvidenceProfile)}
-                        value={evidenceProfile}
-                      >
-                        <option value="lean">Lean</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="full">Full</option>
-                      </select>
-                    </label>
-                    <label className="field-block">
-                      <span>Workspace</span>
-                      <select
-                        disabled={isBridgeLoading || isBridgeSubmitting || bridgeWorkspaces.length === 0}
-                        onChange={(event) => setSelectedWorkspaceId(event.target.value)}
-                        value={selectedWorkspaceId}
-                      >
-                        {bridgeWorkspaces.length ? (
-                          bridgeWorkspaces.map((workspace) => (
-                            <option key={workspace.id} value={workspace.id}>
-                              {workspace.name}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">Bridge unavailable</option>
-                        )}
-                      </select>
-                    </label>
-                    <label className="field-block field-block-wide">
-                      <span>{handoffTarget === 'claude' ? 'Claude session' : 'Delivery mode'}</span>
-                      <select
-                        disabled={
-                          handoffTarget !== 'claude' ||
-                          isSessionLoading ||
-                          isBridgeSubmitting ||
-                          !selectedWorkspaceId
-                        }
-                        onChange={(event) => setSelectedSessionId(event.target.value)}
-                        value={selectedSessionId}
-                      >
-                        <option value="">
-                          {handoffTarget === 'claude' ? 'Create bundle only' : 'Bundle only for this target'}
-                        </option>
-                        {bridgeSessions.map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="handoff-actions">
-                    <button
-                      disabled={isBridgeLoading || isBridgeSubmitting || !selectedWorkspaceId}
-                      onClick={submitHandoff}
-                      type="button"
-                    >
-                      {isBridgeSubmitting
-                        ? 'Preparing packet...'
-                        : handoffTarget === 'claude'
-                          ? 'Send to Claude'
-                          : handoffTarget === 'codex'
-                            ? 'Prepare Codex bundle'
-                            : 'Create local bundle'}
-                    </button>
-                    <button
-                      className="secondary"
-                      disabled={isSessionLoading || isBridgeSubmitting || !selectedWorkspaceId}
-                      onClick={() => void refreshBridgeSessions()}
-                      type="button"
-                    >
-                      Refresh sessions
-                    </button>
-                  </div>
-
-                  <div className="handoff-grid">
-                    <label className="field-block">
-                      <span>Bridge URL</span>
-                      <input
-                        className="field-input"
-                        disabled={isBridgeLoading || isBridgeSubmitting}
-                        onChange={(event) => setBridgeBaseUrl(event.target.value)}
-                        placeholder="http://127.0.0.1:4311"
-                        type="text"
-                        value={bridgeBaseUrl}
-                      />
-                    </label>
-                    <label className="field-block">
-                      <span>Bridge token</span>
-                      <input
-                        className="field-input"
-                        disabled={isBridgeLoading || isBridgeSubmitting}
-                        onChange={(event) => setBridgeToken(event.target.value)}
-                        placeholder="snapclip-dev"
-                        type="text"
-                        value={bridgeToken}
-                      />
-                    </label>
-                    <div className="field-block field-block-wide">
-                      <button
-                        className="secondary"
-                        disabled={isBridgeLoading || isBridgeSubmitting}
-                        onClick={() => void saveBridgeSettings()}
-                        type="button"
-                      >
-                        Save bridge settings
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="handoff-summary-grid">
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Bundle contents</h3>
-                        <span className="context-card-badge">{evidenceProfile}</span>
-                      </div>
-                      <p className="evidence-copy">{describeEvidenceProfile(evidenceProfile)}</p>
-                      <ul className="bundle-list">
-                        <li>`screenshot.png`</li>
-                        <li>`annotated.png`</li>
-                        <li>`context.json`</li>
-                        <li>`annotations.json`</li>
-                        <li>`prompt-claude.md`</li>
-                        <li>`prompt-codex.md`</li>
-                      </ul>
-                    </article>
-                    <article className="context-card">
-                      <div className="context-card-head">
-                        <h3>Delivery status</h3>
-                        <span className="context-card-badge">
-                          {handoffResult ? handoffResult.deliveryState.replaceAll('_', ' ') : 'Not sent yet'}
-                        </span>
-                      </div>
-                      {handoffResult ? (
-                        <dl className="context-list">
-                          <div>
-                            <dt>Task ID</dt>
-                            <dd>{handoffResult.taskId}</dd>
-                          </div>
-                          <div>
-                            <dt>Bundle path</dt>
-                            <dd>{handoffResult.bundlePath}</dd>
-                          </div>
-                          <div>
-                            <dt>Target</dt>
-                            <dd>{handoffResult.deliveryTarget}</dd>
-                          </div>
-                          <div>
-                            <dt>Session</dt>
-                            <dd>{handoffResult.sessionId || 'Bundle only'}</dd>
-                          </div>
-                          {handoffResult.deliveryError ? (
-                            <div>
-                              <dt>Error</dt>
-                              <dd>{handoffResult.deliveryError}</dd>
-                            </div>
-                          ) : null}
-                        </dl>
-                      ) : (
-                        <p className="evidence-copy">
-                          {bridgeError
-                            ? bridgeError
-                            : 'The local bridge writes the packet into the selected workspace and only then attempts delivery.'}
-                        </p>
-                      )}
-                    </article>
-                  </div>
-                </section>
-              </aside>
-            </section>
           </>
         ) : (
-          <section className="empty-state empty-state-rich">
-            <p className="eyebrow">Ready to capture</p>
-            <h2>No clips yet</h2>
-            <p>
-              Use the visible-tab or region capture on a normal web page to start clipping. Browser pages, extension
-              pages, Chrome Web Store, and PDFs are unsupported for now.
-            </p>
+          <section className="empty-state empty-state-plain">
+            <div className="empty-state-copy">
+              <p className="eyebrow">Ready</p>
+              <h2>No clips yet</h2>
+              <p>Clip the current page to start. Browser pages, the Web Store, and PDFs are unsupported.</p>
+            </div>
             <div className="empty-state-actions">
               <button onClick={() => startClip('visible')} type="button">
                 Clip visible tab
@@ -1530,20 +1461,7 @@ export default function App() {
                 Clip area
               </button>
             </div>
-            <div className="empty-state-grid">
-              <article className="empty-tip">
-                <h3>Shortcut first</h3>
-                <p>Use the popup when you need a launcher. Use shortcuts when you already know what to grab.</p>
-              </article>
-              <article className="empty-tip">
-                <h3>Evidence first</h3>
-                <p>Screenshots, crops, annotations, and runtime signals all stay attached to the same local session.</p>
-              </article>
-              <article className="empty-tip">
-                <h3>Local by default</h3>
-                <p>Nothing leaves this machine until you explicitly export or send a packet.</p>
-              </article>
-            </div>
+            <p className="empty-state-note">Stored locally until you export or send a bundle.</p>
           </section>
         )}
       </div>

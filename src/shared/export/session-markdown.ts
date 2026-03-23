@@ -47,6 +47,31 @@ export function createClipSessionMarkdown(session: ClipSession): string {
           ...clip.runtimeContext.domSummary.inputLabels.map((item) => `- Field: ${item}`),
         ]
       : ['- No visible page summary captured.'];
+    const chromeDebuggerSummary = clip.runtimeContext?.chromeDebugger
+      ? [
+          `- Captured at: ${clip.runtimeContext.chromeDebugger.capturedAt}`,
+          `- Status: ${clip.runtimeContext.chromeDebugger.attachError || 'Captured'}`,
+          `- Current URL: ${clip.runtimeContext.chromeDebugger.currentUrl}`,
+          `- Current title: ${clip.runtimeContext.chromeDebugger.currentTitle}`,
+          `- Frame count: ${clip.runtimeContext.chromeDebugger.frameCount}`,
+          `- DOM nodes: ${clip.runtimeContext.chromeDebugger.performance.nodes ?? 'n/a'}`,
+          `- JS heap used: ${clip.runtimeContext.chromeDebugger.performance.jsHeapUsedSize ?? 'n/a'}`,
+          `- Chrome logs: ${clip.runtimeContext.chromeDebugger.logs.length}`,
+          `- Chrome requests: ${clip.runtimeContext.chromeDebugger.network.length}`,
+        ]
+      : ['- No Chrome debugger snapshot captured.'];
+    const chromeDebuggerLogs = clip.runtimeContext?.chromeDebugger?.logs.length
+      ? clip.runtimeContext.chromeDebugger.logs.map(
+          (entry) => `- [${entry.level.toUpperCase()}] ${entry.source}: ${entry.text}`,
+        )
+      : ['- No Chrome debugger logs captured.'];
+    const chromeDebuggerNetwork = clip.runtimeContext?.chromeDebugger?.network.length
+      ? clip.runtimeContext.chromeDebugger.network.map((request) => {
+          const status = request.status === null || typeof request.status === 'undefined' ? 'ERR' : String(request.status);
+          const extra = [request.mimeType, request.failedReason, request.blockedReason].filter(Boolean).join(' | ');
+          return `- ${request.method} ${request.url} -> ${status}${extra ? ` (${extra})` : ''}`;
+        })
+      : ['- No Chrome debugger network snapshot captured.'];
 
     return [
       `# Clip ${index + 1}: ${clip.title}`,
@@ -61,6 +86,9 @@ export function createClipSessionMarkdown(session: ClipSession): string {
       section('Recent Runtime Events', runtimeEvents),
       section('Recent Network Requests', networkRequests),
       section('Visible Page Summary', visiblePageSummary),
+      section('Chrome Debugger Summary', chromeDebuggerSummary),
+      section('Chrome Debugger Logs', chromeDebuggerLogs),
+      section('Chrome Debugger Network', chromeDebuggerNetwork),
       section('Note', [note]),
     ];
   });

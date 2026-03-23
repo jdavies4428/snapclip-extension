@@ -63,6 +63,12 @@ export type OffscreenCopyImageMessage = {
   dataUrl: string;
 };
 
+export type OffscreenCopyPacketMessage = {
+  type: 'offscreen-copy-packet';
+  dataUrl: string;
+  text: string;
+};
+
 export type CancelClipOverlayMessage = {
   type: 'cancel-clip-overlay';
   tabId?: number;
@@ -79,6 +85,7 @@ export type SnapClipMessage =
   | ExportClipSessionMessage
   | OffscreenCopyTextMessage
   | OffscreenCopyImageMessage
+  | OffscreenCopyPacketMessage
   | CancelClipOverlayMessage;
 
 export type SnapClipMessageResponse =

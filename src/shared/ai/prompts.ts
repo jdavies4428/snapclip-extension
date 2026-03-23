@@ -22,13 +22,26 @@ function summarizeRuntime(runtimeContext: RuntimeContext | null): string[] {
     return ['- No runtime evidence was attached to this packet.'];
   }
 
-  return [
+  const summary = [
     `- Runtime events: ${runtimeContext.summary.eventCount}`,
     `- Runtime errors: ${runtimeContext.summary.errorCount}`,
     `- Runtime warnings: ${runtimeContext.summary.warningCount}`,
     `- Failed requests: ${runtimeContext.summary.failedRequestCount}`,
     `- Slow requests: ${runtimeContext.summary.slowRequestCount}`,
   ];
+
+  if (runtimeContext.chromeDebugger) {
+    summary.push(
+      `- Chrome debugger snapshot: ${runtimeContext.chromeDebugger.attachError || 'attached'}`,
+      `- Chrome debugger frames: ${runtimeContext.chromeDebugger.frameCount}`,
+      `- Chrome debugger DOM nodes: ${runtimeContext.chromeDebugger.performance.nodes ?? 'n/a'}`,
+      `- Chrome debugger JS heap used: ${runtimeContext.chromeDebugger.performance.jsHeapUsedSize ?? 'n/a'}`,
+      `- Chrome debugger logs: ${runtimeContext.chromeDebugger.logs.length}`,
+      `- Chrome debugger requests: ${runtimeContext.chromeDebugger.network.length}`,
+    );
+  }
+
+  return summary;
 }
 
 function describeRequestedAction(intent: HandoffIntent): string {

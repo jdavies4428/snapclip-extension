@@ -12,6 +12,7 @@ function installRuntimeMonitorInPage() {
       network: Array<Record<string, unknown>>;
       originalConsoleError?: typeof console.error;
       originalConsoleWarn?: typeof console.warn;
+      originalConsoleLog?: typeof console.log;
       originalFetch?: typeof fetch;
       originalXhrOpen?: typeof XMLHttpRequest.prototype.open;
       originalXhrSend?: typeof XMLHttpRequest.prototype.send;
@@ -35,6 +36,7 @@ function installRuntimeMonitorInPage() {
     network: [] as Array<Record<string, unknown>>,
     originalConsoleError: console.error,
     originalConsoleWarn: console.warn,
+    originalConsoleLog: console.log,
     originalFetch: window.fetch.bind(window),
     originalXhrOpen: XMLHttpRequest.prototype.open,
     originalXhrSend: XMLHttpRequest.prototype.send,
@@ -194,6 +196,16 @@ function installRuntimeMonitorInPage() {
       source: null,
     });
     monitor.originalConsoleWarn?.apply(console, args);
+  };
+
+  console.log = (...args) => {
+    enqueue({
+      type: 'console_log',
+      level: 'log',
+      message: args.map((entry) => serializeUnknown(entry)).join(' '),
+      source: null,
+    });
+    monitor.originalConsoleLog?.apply(console, args);
   };
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {

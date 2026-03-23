@@ -32,6 +32,7 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
         await startClipWorkflow(message.clipMode, {
           tabId: message.tabId,
           windowId: message.windowId,
+          interactive: true,
         });
         return { ok: true };
       } catch (error) {
