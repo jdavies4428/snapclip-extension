@@ -28,27 +28,54 @@ export async function writeTaskBundle({ workspacePath, taskRequest, bundleSlug, 
 function buildBundleFiles(taskRequest) {
   const { payload, target } = taskRequest;
   const defaultPrompt = target === 'codex' ? payload.artifacts.promptCodex : payload.artifacts.promptClaude;
+  const clipImages = Array.isArray(payload.artifacts.clipImages) ? payload.artifacts.clipImages : [];
+  const clipsManifest = payload.artifacts.clipsManifest && typeof payload.artifacts.clipsManifest === 'object'
+    ? payload.artifacts.clipsManifest
+    : null;
+  const hasPacketFiles = Boolean(payload.artifacts.context && payload.artifacts.annotations);
 
   const manifest = {
     bundleVersion: 1,
     target,
+    packageMode: taskRequest.packageMode ?? 'packet',
     intent: taskRequest.intent,
     workspaceId: taskRequest.workspaceId,
     sessionId: taskRequest.sessionId,
     title: payload.title,
     comment: payload.comment,
-    files: ['screenshot.png', 'annotated.png', 'context.json', 'annotations.json', 'prompt.md'],
+    files: [
+      'screenshot.png',
+      'annotated.png',
+      ...clipImages.flatMap((entry) => [entry.screenshotFileName, entry.annotatedFileName]),
+      ...(clipsManifest ? ['clips_manifest.json'] : []),
+      ...(hasPacketFiles ? ['context.json', 'annotations.json'] : []),
+      'prompt.md',
+    ],
   };
 
-  return {
+  const files = {
     'screenshot.png': decodeBase64(payload.artifacts.screenshotBase64),
     'annotated.png': decodeBase64(payload.artifacts.annotatedBase64),
-    'context.json': `${JSON.stringify(payload.artifacts.context, null, 2)}\n`,
-    'annotations.json': `${JSON.stringify(payload.artifacts.annotations, null, 2)}\n`,
     'prompt.md': `${defaultPrompt.trim()}\n`,
     'prompt-claude.md': `${payload.artifacts.promptClaude.trim()}\n`,
     'prompt-codex.md': `${payload.artifacts.promptCodex.trim()}\n`,
     'task.json': `${JSON.stringify(manifest, null, 2)}\n`,
     'request.json': `${stableStringify(taskRequest)}\n`,
   };
+
+  clipImages.forEach((entry) => {
+    files[entry.screenshotFileName] = decodeBase64(entry.screenshotBase64);
+    files[entry.annotatedFileName] = decodeBase64(entry.annotatedBase64);
+  });
+
+  if (clipsManifest) {
+    files['clips_manifest.json'] = `${JSON.stringify(clipsManifest, null, 2)}\n`;
+  }
+
+  if (hasPacketFiles) {
+    files['context.json'] = `${JSON.stringify(payload.artifacts.context, null, 2)}\n`;
+    files['annotations.json'] = `${JSON.stringify(payload.artifacts.annotations, null, 2)}\n`;
+  }
+
+  return files;
 }

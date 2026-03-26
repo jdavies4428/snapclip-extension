@@ -22,14 +22,8 @@ export function buildCodexResumePrompt(bundlePath, prompt, cwd) {
 
   return [
     `A new LLM Clip incident bundle was written to ${readablePath}.`,
-    'Open these local files before responding:',
-    '- prompt-codex.md',
-    '- context.json',
-    '- annotations.json',
-    '- screenshot.png',
-    '- annotated.png',
-    '',
-    'Use screenshot.png as the raw capture and annotated.png as the marked-up version.',
+    'Open `prompt-codex.md` from that folder first, then follow the file instructions inside that prompt.',
+    'The bundle may include an ordered `clips/` directory for multi-image sends.',
     'Then continue with the incident request below:',
     '',
     prompt.trim(),

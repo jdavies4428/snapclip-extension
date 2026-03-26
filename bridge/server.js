@@ -474,6 +474,10 @@ function validateTaskRequest(value) {
     throw new BridgeRequestError(400, 'intent must be fix, plan, or explain.');
   }
 
+  if (value.packageMode !== undefined && !['image', 'packet'].includes(value.packageMode)) {
+    throw new BridgeRequestError(400, 'packageMode must be image or packet.');
+  }
+
   if (!isObject(payload)) {
     throw new BridgeRequestError(400, 'payload is required.');
   }
@@ -503,12 +507,70 @@ function validateTaskRequest(value) {
   validateRequiredString(payload.artifacts.promptClaude, 'payload.artifacts.promptClaude');
   validateRequiredString(payload.artifacts.promptCodex, 'payload.artifacts.promptCodex');
 
-  if (!isObject(payload.artifacts.context)) {
-    throw new BridgeRequestError(400, 'payload.artifacts.context must be a JSON object.');
+  if (payload.artifacts.context !== undefined && payload.artifacts.context !== null && !isObject(payload.artifacts.context)) {
+    throw new BridgeRequestError(400, 'payload.artifacts.context must be a JSON object when provided.');
   }
 
-  if (!isObject(payload.artifacts.annotations)) {
-    throw new BridgeRequestError(400, 'payload.artifacts.annotations must be a JSON object.');
+  if (
+    payload.artifacts.annotations !== undefined &&
+    payload.artifacts.annotations !== null &&
+    !isObject(payload.artifacts.annotations)
+  ) {
+    throw new BridgeRequestError(400, 'payload.artifacts.annotations must be a JSON object when provided.');
+  }
+
+  if (payload.artifacts.clipImages !== undefined) {
+    if (!Array.isArray(payload.artifacts.clipImages)) {
+      throw new BridgeRequestError(400, 'payload.artifacts.clipImages must be an array when provided.');
+    }
+
+    payload.artifacts.clipImages.forEach((entry, index) => {
+      if (!isObject(entry)) {
+        throw new BridgeRequestError(400, `payload.artifacts.clipImages[${index}] must be an object.`);
+      }
+
+      validateRequiredString(entry.clipId, `payload.artifacts.clipImages[${index}].clipId`);
+      validateRequiredString(entry.title, `payload.artifacts.clipImages[${index}].title`);
+      if (entry.note !== undefined && typeof entry.note !== 'string') {
+        throw new BridgeRequestError(400, `payload.artifacts.clipImages[${index}].note must be a string when provided.`);
+      }
+      validateRequiredString(entry.screenshotFileName, `payload.artifacts.clipImages[${index}].screenshotFileName`);
+      validateRequiredString(entry.screenshotBase64, `payload.artifacts.clipImages[${index}].screenshotBase64`);
+      validateRequiredString(entry.annotatedFileName, `payload.artifacts.clipImages[${index}].annotatedFileName`);
+      validateRequiredString(entry.annotatedBase64, `payload.artifacts.clipImages[${index}].annotatedBase64`);
+    });
+  }
+
+  if (payload.artifacts.clipsManifest !== undefined && payload.artifacts.clipsManifest !== null) {
+    if (!isObject(payload.artifacts.clipsManifest)) {
+      throw new BridgeRequestError(400, 'payload.artifacts.clipsManifest must be an object when provided.');
+    }
+
+    if (!Array.isArray(payload.artifacts.clipsManifest.orderedClipIds)) {
+      throw new BridgeRequestError(400, 'payload.artifacts.clipsManifest.orderedClipIds must be an array.');
+    }
+
+    if (!Array.isArray(payload.artifacts.clipsManifest.clips)) {
+      throw new BridgeRequestError(400, 'payload.artifacts.clipsManifest.clips must be an array.');
+    }
+
+    payload.artifacts.clipsManifest.clips.forEach((entry, index) => {
+      if (!isObject(entry)) {
+        throw new BridgeRequestError(400, `payload.artifacts.clipsManifest.clips[${index}] must be an object.`);
+      }
+
+      validateRequiredString(entry.clipId, `payload.artifacts.clipsManifest.clips[${index}].clipId`);
+      validateRequiredString(entry.title, `payload.artifacts.clipsManifest.clips[${index}].title`);
+      validateRequiredString(entry.note, `payload.artifacts.clipsManifest.clips[${index}].note`);
+      validateRequiredString(
+        entry.screenshotFileName,
+        `payload.artifacts.clipsManifest.clips[${index}].screenshotFileName`,
+      );
+      validateRequiredString(
+        entry.annotatedFileName,
+        `payload.artifacts.clipsManifest.clips[${index}].annotatedFileName`,
+      );
+    });
   }
 
   return value;

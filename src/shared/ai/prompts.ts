@@ -1,5 +1,5 @@
 import type { ClipSession, RuntimeContext } from '../types/session';
-import type { HandoffIntent, HandoffTarget } from '../bridge/client';
+import type { HandoffIntent, HandoffPackageMode, HandoffTarget } from '../bridge/client';
 import { buildActionTimeline, redactUrlQuery, sanitizeEvidenceText, type EvidenceProfile } from '../export/evidence';
 
 export type HandoffScope = 'active_clip' | 'session';
@@ -8,9 +8,11 @@ type PromptParams = {
   scope: HandoffScope;
   target: HandoffTarget;
   intent: HandoffIntent;
+  packageMode: HandoffPackageMode;
   evidenceProfile: EvidenceProfile;
   activeClip: {
     title: string;
+    note?: string;
     createdAt: string;
     page: {
       url: string;
@@ -22,6 +24,7 @@ type PromptParams = {
   annotationsFileName?: string;
   screenshotFileName?: string;
   annotatedFileName?: string;
+  clipsManifestFileName?: string;
 };
 
 function summarizeRuntime(runtimeContext: RuntimeContext | null): string[] {
@@ -86,11 +89,13 @@ function buildPromptHeader(params: PromptParams): string[] {
   const annotationsFileName = params.annotationsFileName ?? 'annotations.json';
   const screenshotFileName = params.screenshotFileName ?? 'screenshot.png';
   const annotatedFileName = params.annotatedFileName ?? 'annotated.png';
+  const clipsManifestFileName = params.clipsManifestFileName ?? 'clips_manifest.json';
 
   return [
     '# LLM Clip Incident Packet',
     '',
     `- Target: ${params.target}`,
+    `- Package mode: ${params.packageMode}`,
     `- Evidence profile: ${params.evidenceProfile}`,
     `- Scope: ${params.scope === 'session' ? `session (${params.session.clips.length} clips)` : 'active clip'}`,
     `- Active clip: ${sanitizeEvidenceText(params.activeClip.title)}`,
@@ -98,10 +103,20 @@ function buildPromptHeader(params: PromptParams): string[] {
     `- Captured at: ${params.activeClip.createdAt}`,
     '',
     'Read these files before responding:',
-    `- \`${screenshotFileName}\` — the raw captured clip image`,
-    `- \`${annotatedFileName}\` — the same clip with drawn annotations`,
-    `- \`${contextFileName}\` — structured page, runtime, and Chrome debugger evidence`,
-    `- \`${annotationsFileName}\` — the annotation geometry and note metadata`,
+    `- \`${screenshotFileName}\` — the raw captured active clip image`,
+    `- \`${annotatedFileName}\` — the active clip with drawn annotations`,
+    ...(params.scope === 'session'
+      ? [
+          '- `clips/` — all saved clip image pairs, ordered newest-first as numbered folders',
+          `- \`${clipsManifestFileName}\` — the exact image-to-title-to-note pairing for every saved clip`,
+        ]
+      : []),
+    ...(params.packageMode === 'packet'
+      ? [
+          `- \`${contextFileName}\` — structured page, runtime, and Chrome debugger evidence`,
+          `- \`${annotationsFileName}\` — the annotation geometry and note metadata`,
+        ]
+      : []),
     '',
   ];
 }
@@ -109,14 +124,31 @@ function buildPromptHeader(params: PromptParams): string[] {
 export function createClaudePrompt(params: PromptParams): string {
   return [
     ...buildPromptHeader(params),
-    'Focus on the screenshot and annotations first, then use the structured context and runtime evidence to confirm or reject hypotheses.',
+    'Primary user instructions:',
+    params.activeClip.note?.trim()
+      ? params.activeClip.note.trim()
+      : 'Investigate what is visible in the capture and respond based on the attached evidence.',
     '',
-    'Runtime evidence summary:',
-    ...summarizeRuntime(params.activeClip.runtimeContext),
+    params.scope === 'session'
+      ? 'Treat the bundle as an ordered image sequence. Compare all saved clips in `clips/` before you decide what changed or what is broken.'
+      : 'Focus on the active clip image first.',
+    params.scope === 'session'
+      ? 'Use `clips_manifest.json` as the source of truth for which note belongs to which image pair.'
+      : 'Use the active clip note as the primary instruction for this image.',
+    params.packageMode === 'packet'
+      ? 'Then use the structured context and runtime evidence to confirm or reject hypotheses.'
+      : 'Stay image-first. Only rely on the visual evidence in the attached images.',
     '',
-    'Action timeline summary:',
-    ...summarizeActions(params.activeClip),
-    '',
+    ...(params.packageMode === 'packet'
+      ? [
+          'Runtime evidence summary:',
+          ...summarizeRuntime(params.activeClip.runtimeContext),
+          '',
+          'Action timeline summary:',
+          ...summarizeActions(params.activeClip),
+          '',
+        ]
+      : []),
     'Requested action:',
     describeRequestedAction(params.intent),
     '',
@@ -129,14 +161,32 @@ export function createClaudePrompt(params: PromptParams): string {
 export function createCodexPrompt(params: PromptParams): string {
   return [
     ...buildPromptHeader(params),
+    'Primary user instructions:',
+    params.activeClip.note?.trim()
+      ? params.activeClip.note.trim()
+      : 'Investigate what is visible in the capture and respond based on the attached evidence.',
+    '',
     'Treat this as a coding incident packet. Prefer code-aware investigation and a minimal, reversible fix plan.',
+    params.scope === 'session'
+      ? 'Inspect the ordered image sequence in `clips/` before you infer regressions or state transitions.'
+      : 'Inspect the active clip image first.',
+    params.scope === 'session'
+      ? 'Use `clips_manifest.json` to pair each clip note with the correct raw and annotated image files.'
+      : 'Use the active clip note as the primary instruction for this image.',
+    params.packageMode === 'packet'
+      ? 'Use the structured packet files to confirm technical hypotheses.'
+      : 'Keep the analysis image-first and avoid assuming extra runtime context.',
     '',
-    'Runtime evidence summary:',
-    ...summarizeRuntime(params.activeClip.runtimeContext),
-    '',
-    'Action timeline summary:',
-    ...summarizeActions(params.activeClip),
-    '',
+    ...(params.packageMode === 'packet'
+      ? [
+          'Runtime evidence summary:',
+          ...summarizeRuntime(params.activeClip.runtimeContext),
+          '',
+          'Action timeline summary:',
+          ...summarizeActions(params.activeClip),
+          '',
+        ]
+      : []),
     'Requested action:',
     describeRequestedAction(params.intent),
     '',

@@ -186,6 +186,7 @@ export const chromeDebuggerContextSchema = z.object({
 export const clipHandoffRecordSchema = z.object({
   taskId: z.string(),
   target: z.enum(['claude', 'codex', 'export_only']),
+  packageMode: z.enum(['image', 'packet']).default('packet'),
   deliveryState: z.enum(['queued', 'delivering', 'bundle_created', 'delivered', 'failed_after_bundle_creation']),
   deliveryTarget: z.enum(['bundle_only', 'claude_session', 'codex_session', 'codex_bundle']),
   workspaceId: z.string(),

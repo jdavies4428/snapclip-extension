@@ -22,12 +22,8 @@ export function buildClaudeResumePrompt(bundlePath, prompt, cwd) {
 
   return [
     `A new LLM Clip incident bundle was written to ${readablePath}.`,
-    'Read these files from that folder before responding:',
-    '- prompt-claude.md',
-    '- context.json',
-    '- annotations.json',
-    '- screenshot.png',
-    '- annotated.png',
+    'Open `prompt-claude.md` from that folder first, then follow the file instructions inside that prompt.',
+    'The bundle may include an ordered `clips/` directory for multi-image sends.',
     '',
     'Then continue with the incident request below:',
     '',

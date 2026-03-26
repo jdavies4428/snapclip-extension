@@ -44,6 +44,7 @@ async function startTestBridge(options = {}) {
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    env: {},
     claudeStateRoot,
     codexStateRoot,
     claudeProjectsRoot,
@@ -306,16 +307,101 @@ test('creating an export task writes a deterministic bundle and completes immedi
   assert.ok(screenshotStats.size > 0);
 });
 
+test('image-only session bundles write all clip images and omit shared packet files', async (t) => {
+  const { bridge, baseUrl } = await startTestBridge();
+  t.after(async () => {
+    await bridge.close();
+  });
+
+  const workspaces = await bridgeFetch(baseUrl, '/workspaces');
+  const workspaceId = workspaces.payload.workspaces[0].id;
+  const created = await bridgeFetch(baseUrl, '/tasks', {
+    method: 'POST',
+    body: JSON.stringify(
+      createBaseTask(workspaceId, {
+        target: 'claude',
+        sessionId: 'claude-session-1',
+        packageMode: 'image',
+        payload: {
+          ...createBaseTask(workspaceId).payload,
+          artifacts: {
+            ...createBaseTask(workspaceId).payload.artifacts,
+            context: null,
+            annotations: null,
+            clipImages: [
+              {
+                clipId: 'clip-1',
+                title: 'First clip',
+                note: 'Baseline before the hover state breaks.',
+                screenshotFileName: 'clips/01-clip-1-raw.png',
+                screenshotBase64: Buffer.from('clip-1-raw').toString('base64'),
+                annotatedFileName: 'clips/01-clip-1-annotated.png',
+                annotatedBase64: Buffer.from('clip-1-annotated').toString('base64'),
+              },
+              {
+                clipId: 'clip-2',
+                title: 'Second clip',
+                note: 'Hover state is broken in this image.',
+                screenshotFileName: 'clips/02-clip-2-raw.png',
+                screenshotBase64: Buffer.from('clip-2-raw').toString('base64'),
+                annotatedFileName: 'clips/02-clip-2-annotated.png',
+                annotatedBase64: Buffer.from('clip-2-annotated').toString('base64'),
+              },
+            ],
+            clipsManifest: {
+              orderedClipIds: ['clip-1', 'clip-2'],
+              clips: [
+                {
+                  clipId: 'clip-1',
+                  title: 'First clip',
+                  note: 'Baseline before the hover state breaks.',
+                  screenshotFileName: 'clips/01-clip-1-raw.png',
+                  annotatedFileName: 'clips/01-clip-1-annotated.png',
+                },
+                {
+                  clipId: 'clip-2',
+                  title: 'Second clip',
+                  note: 'Hover state is broken in this image.',
+                  screenshotFileName: 'clips/02-clip-2-raw.png',
+                  annotatedFileName: 'clips/02-clip-2-annotated.png',
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+  });
+
+  assert.equal(created.response.status, 200);
+
+  const bundlePath = created.payload.bundlePath;
+  const firstClipStats = await stat(join(bundlePath, 'clips/01-clip-1-raw.png'));
+  const secondClipStats = await stat(join(bundlePath, 'clips/02-clip-2-annotated.png'));
+  const clipsManifest = JSON.parse(await readFile(join(bundlePath, 'clips_manifest.json'), 'utf8'));
+  assert.ok(firstClipStats.size > 0);
+  assert.ok(secondClipStats.size > 0);
+  assert.deepEqual(clipsManifest.orderedClipIds, ['clip-1', 'clip-2']);
+  assert.equal(clipsManifest.clips[0].note, 'Baseline before the hover state breaks.');
+  assert.equal(clipsManifest.clips[1].annotatedFileName, 'clips/02-clip-2-annotated.png');
+
+  await assert.rejects(() => stat(join(bundlePath, 'context.json')));
+  await assert.rejects(() => stat(join(bundlePath, 'annotations.json')));
+});
+
 test('claude task delivery is queued and can be polled to completion', async (t) => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'snapclip-bridge-'));
   const claudeStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-claude-state-'));
+  const codexStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-codex-state-'));
   const capturedCalls = [];
   const bridge = createBridgeServer({
     host: '127.0.0.1',
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    env: {},
     claudeStateRoot,
+    codexStateRoot,
     claudeRunner: async (input) => {
       await new Promise((resolve) => setTimeout(resolve, 40));
       capturedCalls.push(input);
@@ -367,6 +453,7 @@ test('codex task delivery is queued and resumes the target session with both ima
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    env: {},
     claudeStateRoot,
     codexStateRoot,
     codexRunner: async (input) => {

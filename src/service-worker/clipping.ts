@@ -3000,7 +3000,7 @@ function mountClipOverlay(
         pendingApprovalCount?: number;
       };
 
-      type AgentPackagePreset = 'image' | 'packet' | 'debug';
+      type AgentPackagePreset = 'image' | 'packet';
 
       const claudeSessionSurfaces: Array<{
         mode: 'rail';
@@ -3108,25 +3108,18 @@ function mountClipOverlay(
       const getPackagePresetConfig = (preset: AgentPackagePreset) => {
         if (preset === 'image') {
           return {
-            label: 'Image focus',
-            detail: 'Send the screenshot and annotations with lean structured evidence.',
+            label: 'Image only',
+            detail: 'Send the clip images only, without the shared packet files.',
+            packageMode: 'image' as const,
             scope: 'active_clip' as const,
             evidenceProfile: 'lean' as const,
           };
         }
 
-        if (preset === 'debug') {
-          return {
-            label: 'Debug packet',
-            detail: 'Send the clip with the fullest runtime and debugger evidence we keep locally.',
-            scope: 'active_clip' as const,
-            evidenceProfile: 'full' as const,
-          };
-        }
-
         return {
-          label: 'Clip packet',
-          detail: 'Send the recommended clip packet with image, annotations, and balanced evidence.',
+          label: 'Image + packet',
+          detail: 'Send the image together with one shared local packet of notes, annotations, and evidence.',
+          packageMode: 'packet' as const,
           scope: 'active_clip' as const,
           evidenceProfile: 'balanced' as const,
         };
@@ -3319,7 +3312,7 @@ function mountClipOverlay(
               packageGrid.style.display = 'grid';
               packageGrid.style.gap = '8px';
 
-              (['image', 'packet', 'debug'] as AgentPackagePreset[]).forEach((preset) => {
+              (['image', 'packet'] as AgentPackagePreset[]).forEach((preset) => {
                 const presetConfig = getPackagePresetConfig(preset);
                 const presetButton = document.createElement('button');
                 presetButton.type = 'button';
@@ -3394,8 +3387,8 @@ function mountClipOverlay(
           let defaultBridgeStatus = 'Start the local companion to enable one-way agent handoff.';
           if (hasLiveBridgeSessions) {
             defaultBridgeStatus = selectedClaudeSessionId
-              ? 'A live agent session is ready. Send includes the screenshot, annotated image, and local evidence packet.'
-              : 'Live agent sessions were found and stay local unless you send them. The handoff includes the screenshot, annotated image, and local evidence packet.';
+              ? 'A live agent session is ready. Choose image only or image + packet.'
+              : 'Live agent sessions were found and stay local unless you send them. Choose image only or image + packet.';
           } else if (bridgeHealthState === 'unavailable') {
             defaultBridgeStatus = 'Install or start the local companion to send clips directly into a live agent session.';
           } else if (bridgeHealthState === 'claude_unavailable') {
@@ -3655,6 +3648,7 @@ function mountClipOverlay(
             draftNote: noteField.value,
             draftAnnotations: annotations,
             intent: 'fix',
+            packageMode: packageConfig.packageMode,
             scope: packageConfig.scope,
             evidenceProfile: packageConfig.evidenceProfile,
             ...(currentClip

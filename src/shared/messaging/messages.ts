@@ -1,4 +1,12 @@
-import type { HandoffIntent, HandoffTarget, BridgeHealth, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
+import type {
+  HandoffIntent,
+  HandoffPackageMode,
+  HandoffTarget,
+  BridgeHealth,
+  BridgeSession,
+  BridgeTask,
+  BridgeWorkspace,
+} from '../bridge/client';
 import type { EvidenceProfile } from '../export/evidence';
 import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
 import type { HandoffScope } from '../ai/prompts';
@@ -67,6 +75,7 @@ export type SendBridgeSessionMessage = {
   intent?: HandoffIntent;
   scope?: HandoffScope;
   evidenceProfile?: EvidenceProfile;
+  packageMode?: HandoffPackageMode;
   newClip?: {
     clipMode: ClipMode;
     title?: string;

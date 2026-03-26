@@ -12,7 +12,7 @@ import {
 } from '../shared/bridge/client';
 import { buildBridgeTaskRequest } from '../shared/bridge/handoff';
 import type { SendBridgeSessionMessage } from '../shared/messaging/messages';
-import type { HandoffIntent, HandoffTarget } from '../shared/bridge/client';
+import type { HandoffIntent, HandoffPackageMode, HandoffTarget } from '../shared/bridge/client';
 import type { HandoffScope } from '../shared/ai/prompts';
 import type { EvidenceProfile } from '../shared/export/evidence';
 import type { ClipHandoffRecord, ClipRecord, ClipSession } from '../shared/types/session';
@@ -130,12 +130,14 @@ function buildHandoffRecord(params: {
   task: BridgeTask;
   workspaceName: string;
   sessionLabel: string | null;
+  packageMode: HandoffPackageMode;
 }): ClipHandoffRecord {
-  const { task, workspaceName, sessionLabel } = params;
+  const { task, workspaceName, sessionLabel, packageMode } = params;
 
   return {
     taskId: task.id,
     target: task.target,
+    packageMode,
     deliveryState: task.delivery.state,
     deliveryTarget: task.delivery.target,
     workspaceId: task.workspaceId,
@@ -175,6 +177,7 @@ export async function sendClipToBridgeSession(
   const draftTitle = params.draftTitle?.trim() || clip.title;
   const draftNote = params.draftNote ?? clip.note;
   const target = params.target;
+  const packageMode = params.packageMode ?? 'packet';
   const workspaceId = params.workspaceId.trim();
   const sessionId = params.sessionId.trim();
   const intent = params.intent ?? 'fix';
@@ -207,6 +210,7 @@ export async function sendClipToBridgeSession(
     sessionId,
     target,
     intent,
+    packageMode,
     scope,
     evidenceProfile,
     activeClip: {
@@ -235,6 +239,7 @@ export async function sendClipToBridgeSession(
       task: finalTask,
       workspaceName,
       sessionLabel: finalTask.delivery.sessionId ? sessionLabel : null,
+      packageMode,
     }),
   );
 

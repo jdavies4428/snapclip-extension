@@ -129,12 +129,14 @@ export type BridgeHookInstallResponse = {
 
 export type HandoffTarget = 'claude' | 'codex' | 'export_only';
 export type HandoffIntent = 'fix' | 'plan' | 'explain';
+export type HandoffPackageMode = 'image' | 'packet';
 
 export type BridgeTaskRequest = {
   workspaceId: string;
   sessionId: string | null;
   target: HandoffTarget;
   intent: HandoffIntent;
+  packageMode?: HandoffPackageMode;
   payload: {
     title: string;
     comment: string;
@@ -146,8 +148,27 @@ export type BridgeTaskRequest = {
       screenshotBase64: string;
       annotatedFileName: 'annotated.png';
       annotatedBase64: string;
-      context: Record<string, unknown>;
-      annotations: Record<string, unknown>;
+      clipImages?: Array<{
+        clipId: string;
+        title: string;
+        note?: string;
+        screenshotFileName: string;
+        screenshotBase64: string;
+        annotatedFileName: string;
+        annotatedBase64: string;
+      }>;
+      clipsManifest?: {
+        orderedClipIds: string[];
+        clips: Array<{
+          clipId: string;
+          title: string;
+          note: string;
+          screenshotFileName: string;
+          annotatedFileName: string;
+        }>;
+      } | null;
+      context?: Record<string, unknown> | null;
+      annotations?: Record<string, unknown> | null;
       promptClaude: string;
       promptCodex: string;
     };
