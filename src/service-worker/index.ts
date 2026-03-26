@@ -29,44 +29,17 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((error) => console.error('Failed to set side panel behavior', error));
 });
 
-let lastFocusedWindowId: number | null = null;
-
-void chrome.windows
-  .getLastFocused()
-  .then((windowInfo) => {
-    if (typeof windowInfo.id === 'number' && windowInfo.id !== chrome.windows.WINDOW_ID_NONE) {
-      lastFocusedWindowId = windowInfo.id;
-    }
-  })
-  .catch(() => {
-    lastFocusedWindowId = null;
-  });
-
-chrome.windows.onFocusChanged.addListener((windowId) => {
-  if (windowId !== chrome.windows.WINDOW_ID_NONE) {
-    lastFocusedWindowId = windowId;
-  }
-});
-
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  if (typeof activeInfo.windowId === 'number') {
-    lastFocusedWindowId = activeInfo.windowId;
-  }
-});
-
 async function openSidePanelForLastFocusedWindow() {
-  if (typeof lastFocusedWindowId === 'number') {
-    await chrome.sidePanel.open({ windowId: lastFocusedWindowId });
-    return;
-  }
+  const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
+  const targetTab =
+    tabs.find((tab) => typeof tab.windowId === 'number' && tab.active) ??
+    tabs.find((tab) => typeof tab.windowId === 'number');
 
-  const windowInfo = await chrome.windows.getLastFocused();
-  if (typeof windowInfo.id !== 'number' || windowInfo.id === chrome.windows.WINDOW_ID_NONE) {
+  if (typeof targetTab?.windowId !== 'number') {
     throw new Error('No active browser window was found.');
   }
 
-  lastFocusedWindowId = windowInfo.id;
-  await chrome.sidePanel.open({ windowId: windowInfo.id });
+  await chrome.sidePanel.open({ windowId: targetTab.windowId });
 }
 
 async function openLastCapturedClipEditor() {
