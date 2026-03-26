@@ -3030,6 +3030,8 @@ function mountClipOverlay(
         pendingApprovalCount?: number;
       };
 
+      type AgentPackagePreset = 'image' | 'packet' | 'debug';
+
       const claudeSessionSurfaces: Array<{
         mode: 'rail';
         root: HTMLDivElement;
@@ -3047,6 +3049,7 @@ function mountClipOverlay(
       let isBridgeSending = false;
       let activeClaudeSessionId = '';
       let successfulClaudeSessionId = '';
+      let pendingPackageSessionId = '';
       let bridgeRequestToken = 0;
 
       const styleClaudeStatus = (
@@ -3130,6 +3133,33 @@ function mountClipOverlay(
         }
 
         return `Sending to ${sessionLabel}...`;
+      };
+
+      const getPackagePresetConfig = (preset: AgentPackagePreset) => {
+        if (preset === 'image') {
+          return {
+            label: 'Image focus',
+            detail: 'Send the screenshot and annotations with lean structured evidence.',
+            scope: 'active_clip' as const,
+            evidenceProfile: 'lean' as const,
+          };
+        }
+
+        if (preset === 'debug') {
+          return {
+            label: 'Debug packet',
+            detail: 'Send the clip with the fullest runtime and debugger evidence we keep locally.',
+            scope: 'active_clip' as const,
+            evidenceProfile: 'full' as const,
+          };
+        }
+
+        return {
+          label: 'Clip packet',
+          detail: 'Send the recommended clip packet with image, annotations, and balanced evidence.',
+          scope: 'active_clip' as const,
+          evidenceProfile: 'balanced' as const,
+        };
       };
 
       const renderClaudeSessionSurfaces = () => {
@@ -3260,7 +3290,23 @@ function mountClipOverlay(
                   : 'rgba(255,255,255,0.08)';
               sessionButton.style.color = '#edf3fb';
               sessionButton.addEventListener('click', () => {
-                void sendToAgentSession(session);
+                if (isBridgeLoading || isBridgeSending) {
+                  return;
+                }
+
+                selectedClaudeSessionId = session.id;
+                selectedWorkspaceId = session.workspaceId || selectedWorkspaceId;
+                successfulClaudeSessionId = '';
+                pendingPackageSessionId = pendingPackageSessionId === session.id ? '' : session.id;
+                bridgeStatusMessage = pendingPackageSessionId
+                  ? ''
+                  : `Choose what to send to ${session.label}.`;
+                if (pendingPackageSessionId !== session.id) {
+                  bridgeStatusMessage = `Choose what to send to ${session.label}.`;
+                }
+                bridgeStatusTone = 'default';
+                void persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
+                renderClaudeSessionSurfaces();
               });
               sessionRow.append(sessionButton);
             });
@@ -3279,6 +3325,92 @@ function mountClipOverlay(
             empty.style.fontSize = '12px';
             empty.style.lineHeight = '1.45';
             sessionRow.append(empty);
+          }
+
+          if (pendingPackageSessionId) {
+            const pendingSession = bridgeSessions.find((session) => session.id === pendingPackageSessionId) ?? null;
+            if (pendingSession) {
+              const packagePanel = document.createElement('div');
+              packagePanel.style.display = 'grid';
+              packagePanel.style.gap = '10px';
+              packagePanel.style.marginTop = '10px';
+              packagePanel.style.padding = '12px';
+              packagePanel.style.borderRadius = '14px';
+              packagePanel.style.background = 'rgba(6, 12, 22, 0.56)';
+              packagePanel.style.border = '1px solid rgba(117, 204, 255, 0.14)';
+
+              const packageTitle = document.createElement('div');
+              packageTitle.textContent = `Choose what to send to ${pendingSession.label}`;
+              packageTitle.style.color = '#edf3fb';
+              packageTitle.style.fontSize = '12px';
+              packageTitle.style.fontWeight = '700';
+
+              const packageGrid = document.createElement('div');
+              packageGrid.style.display = 'grid';
+              packageGrid.style.gap = '8px';
+
+              (['image', 'packet', 'debug'] as AgentPackagePreset[]).forEach((preset) => {
+                const presetConfig = getPackagePresetConfig(preset);
+                const presetButton = document.createElement('button');
+                presetButton.type = 'button';
+                presetButton.disabled = isBridgeLoading || isBridgeSending;
+                presetButton.style.display = 'grid';
+                presetButton.style.gap = '4px';
+                presetButton.style.textAlign = 'left';
+                presetButton.style.border = '1px solid rgba(255,255,255,0.08)';
+                presetButton.style.borderRadius = '12px';
+                presetButton.style.padding = '10px 12px';
+                presetButton.style.background = 'rgba(255,255,255,0.04)';
+                presetButton.style.color = '#edf3fb';
+                presetButton.style.cursor = presetButton.disabled ? 'default' : 'pointer';
+
+                const presetLabel = document.createElement('div');
+                presetLabel.textContent = presetConfig.label;
+                presetLabel.style.fontSize = '12px';
+                presetLabel.style.fontWeight = '700';
+
+                const presetDetail = document.createElement('div');
+                presetDetail.textContent = presetConfig.detail;
+                presetDetail.style.fontSize = '11px';
+                presetDetail.style.lineHeight = '1.45';
+                presetDetail.style.color = '#b7c4da';
+
+                presetButton.append(presetLabel, presetDetail);
+                presetButton.addEventListener('click', () => {
+                  void sendToAgentSession(pendingSession, preset);
+                });
+                packageGrid.append(presetButton);
+              });
+
+              const packageHint = document.createElement('div');
+              packageHint.textContent = 'Replies stay in the target session. Snapclip only sends the local bundle one-way.';
+              packageHint.style.color = '#9db2cf';
+              packageHint.style.fontSize = '11px';
+              packageHint.style.lineHeight = '1.45';
+
+              const packageDismiss = document.createElement('button');
+              packageDismiss.type = 'button';
+              packageDismiss.textContent = 'Cancel';
+              packageDismiss.style.justifySelf = 'start';
+              packageDismiss.style.border = '0';
+              packageDismiss.style.borderRadius = '10px';
+              packageDismiss.style.padding = '8px 10px';
+              packageDismiss.style.font = 'inherit';
+              packageDismiss.style.fontSize = '12px';
+              packageDismiss.style.fontWeight = '700';
+              packageDismiss.style.cursor = 'pointer';
+              packageDismiss.style.background = 'rgba(255,255,255,0.08)';
+              packageDismiss.style.color = '#edf3fb';
+              packageDismiss.addEventListener('click', () => {
+                pendingPackageSessionId = '';
+                bridgeStatusMessage = '';
+                bridgeStatusTone = 'default';
+                renderClaudeSessionSurfaces();
+              });
+
+              packagePanel.append(packageTitle, packageGrid, packageHint, packageDismiss);
+              root.append(head, sessionRow, packagePanel);
+            }
           }
 
           const status = document.createElement('div');
@@ -3311,7 +3443,11 @@ function mountClipOverlay(
           status.textContent = bridgeStatusMessage || defaultBridgeStatus;
           styleClaudeStatus(status, bridgeStatusTone);
 
-          root.append(head, sessionRow, status);
+          if (!pendingPackageSessionId || !bridgeSessions.find((session) => session.id === pendingPackageSessionId)) {
+            root.append(head, sessionRow, status);
+          } else {
+            root.append(status);
+          }
         });
       };
 
@@ -3319,6 +3455,7 @@ function mountClipOverlay(
         selectedWorkspaceId = workspaceId;
         selectedClaudeSessionId = '';
         successfulClaudeSessionId = '';
+        pendingPackageSessionId = '';
         bridgeStatusMessage = '';
         bridgeStatusTone = 'default';
         renderClaudeSessionSurfaces();
@@ -3331,6 +3468,7 @@ function mountClipOverlay(
         isBridgeLoading = true;
         bridgeStatusMessage = '';
         bridgeStatusTone = 'default';
+        pendingPackageSessionId = '';
         renderClaudeSessionSurfaces();
 
         try {
@@ -3450,6 +3588,7 @@ function mountClipOverlay(
               ? 'Pick a workspace to inspect live agent sessions.'
               : 'The local bridge returned no workspaces.';
             bridgeStatusTone = bridgeWorkspaces.length ? 'default' : 'error';
+            pendingPackageSessionId = '';
             await persistBridgeSelection('', '');
             return;
           }
@@ -3489,11 +3628,15 @@ function mountClipOverlay(
             selectedClaudeSessionId || storedSelection.sessionId,
           );
           await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
+          if (!bridgeSessions.some((session) => session.id === pendingPackageSessionId)) {
+            pendingPackageSessionId = '';
+          }
         } catch (error) {
           bridgeHealthState = 'unavailable';
           bridgeHealthSummary = '';
           bridgeWorkspaces = reloadWorkspaces ? [] : bridgeWorkspaces;
           bridgeSessions = [];
+          pendingPackageSessionId = '';
           bridgeStatusMessage =
             error instanceof Error ? error.message : 'The local companion is unavailable.';
           bridgeStatusTone = 'error';
@@ -3505,7 +3648,10 @@ function mountClipOverlay(
         }
       };
 
-      const sendToAgentSession = async (targetSession: OverlayBridgeSession) => {
+      const sendToAgentSession = async (
+        targetSession: OverlayBridgeSession,
+        packagePreset: AgentPackagePreset,
+      ) => {
         if (isBridgeSending) {
           return;
         }
@@ -3517,13 +3663,15 @@ function mountClipOverlay(
         isBridgeSending = true;
         activeClaudeSessionId = targetSession.id;
         successfulClaudeSessionId = '';
+        pendingPackageSessionId = '';
         selectedClaudeSessionId = targetSession.id;
         selectedWorkspaceId = targetSession.workspaceId || selectedWorkspaceId;
         const targetLabel = targetSession.target === 'codex' ? 'Codex' : 'Claude';
-        bridgeStatusMessage = `Sending to ${targetSession.label}...`;
+        const packageConfig = getPackagePresetConfig(packagePreset);
+        bridgeStatusMessage = `Sending ${packageConfig.label.toLowerCase()} to ${targetSession.label}...`;
         bridgeStatusTone = 'default';
         renderClaudeSessionSurfaces();
-        setActionStatus(`Sending to ${targetSession.label}...`);
+        setActionStatus(`Sending ${packageConfig.label.toLowerCase()} to ${targetSession.label}...`);
         await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
 
         try {
@@ -3537,8 +3685,8 @@ function mountClipOverlay(
             draftNote: noteField.value,
             draftAnnotations: annotations,
             intent: 'fix',
-            scope: 'active_clip',
-            evidenceProfile: 'balanced',
+            scope: packageConfig.scope,
+            evidenceProfile: packageConfig.evidenceProfile,
             ...(currentClip
               ? {}
               : {
