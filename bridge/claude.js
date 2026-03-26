@@ -1,9 +1,20 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 
 function resolveClaudeCommand() {
   const configuredBinary = String(process.env.SNAPCLIP_CLAUDE_BIN ?? '').trim();
-  return configuredBinary || 'claude';
+  if (configuredBinary) {
+    return configuredBinary;
+  }
+
+  const knownPaths = [
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+  ];
+
+  const discoveredPath = knownPaths.find((candidate) => existsSync(candidate));
+  return discoveredPath || 'claude';
 }
 
 export function buildClaudeResumePrompt(bundlePath, prompt, cwd) {

@@ -187,7 +187,7 @@ export const clipHandoffRecordSchema = z.object({
   taskId: z.string(),
   target: z.enum(['claude', 'codex', 'export_only']),
   deliveryState: z.enum(['queued', 'delivering', 'bundle_created', 'delivered', 'failed_after_bundle_creation']),
-  deliveryTarget: z.enum(['bundle_only', 'claude_session', 'codex_bundle']),
+  deliveryTarget: z.enum(['bundle_only', 'claude_session', 'codex_session', 'codex_bundle']),
   workspaceId: z.string(),
   workspaceName: z.string(),
   sessionId: z.string().nullable(),

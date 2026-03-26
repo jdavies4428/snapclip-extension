@@ -14,16 +14,15 @@ const CLAUDE_HOOK_ENDPOINTS = {
 };
 
 const REQUIRED_DISCOVERY_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit'];
+const COMMAND_LIFECYCLE_EVENTS = new Set(['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'Stop']);
 
 export function getDefaultClaudeSettingsPath(cwd = process.cwd()) {
   return resolve(homedir(), '.claude', 'settings.local.json');
 }
 
 export function buildClaudeHookConfig({ baseUrl, token }) {
-  const normalizedBaseUrl = String(baseUrl ?? '').trim().replace(/\/+$/, '');
-  const headers = {
-    'X-SnapClip-Token': String(token ?? '').trim(),
-  };
+  const normalizedBaseUrl = normalizeHookBaseUrl(baseUrl);
+  const normalizedToken = String(token ?? '').trim();
 
   return {
     hooks: Object.fromEntries(
@@ -32,17 +31,60 @@ export function buildClaudeHookConfig({ baseUrl, token }) {
         [
           {
             hooks: [
-              {
-                type: 'http',
-                url: `${normalizedBaseUrl}${pathname}`,
-                headers,
-              },
+              buildHookDefinition({
+                eventName,
+                pathname,
+                baseUrl: normalizedBaseUrl,
+                token: normalizedToken,
+              }),
             ],
           },
         ],
       ]),
     ),
   };
+}
+
+function buildHookDefinition({ eventName, pathname, baseUrl, token }) {
+  const url = `${baseUrl}${pathname}`;
+  if (COMMAND_LIFECYCLE_EVENTS.has(eventName)) {
+    return {
+      type: 'command',
+      command:
+        `curl -sf -X POST ${shellSingleQuote(url)}` +
+        ` -H 'Content-Type: application/json'` +
+        ` -H ${shellSingleQuote(`X-SnapClip-Token: ${token}`)}` +
+        ' --data-binary @- || true',
+    };
+  }
+
+  return {
+    type: 'http',
+    url,
+    headers: {
+      'X-SnapClip-Token': token,
+    },
+  };
+}
+
+function normalizeHookBaseUrl(baseUrl) {
+  const normalized = String(baseUrl ?? '').trim().replace(/\/+$/, '');
+  if (!normalized) {
+    throw new Error('Claude hook installation requires an absolute bridge base URL.');
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`Claude hook installation requires a valid absolute URL. Received: ${normalized}`);
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Claude hook installation requires an http(s) bridge URL. Received: ${normalized}`);
+  }
+
+  return normalized;
 }
 
 export async function installClaudeHookConfig({
@@ -115,40 +157,15 @@ function mergeHookSettings(existing, additions) {
 }
 
 function upsertHookEntries(currentEntries, additions) {
-  const nextEntries = currentEntries.map((entry) =>
-    isPlainObject(entry) ? { ...entry, hooks: Array.isArray(entry.hooks) ? [...entry.hooks] : [] } : entry,
-  );
+  const nextEntries = currentEntries
+    .map((entry) =>
+      isPlainObject(entry) ? { ...entry, hooks: Array.isArray(entry.hooks) ? [...entry.hooks] : [] } : entry,
+    )
+    .filter((entry) => !entryContainsManagedSnapclipHook(entry));
 
   for (const addition of additions) {
     const nextHook = addition.hooks?.[0];
-    if (!isPlainObject(nextHook) || typeof nextHook.url !== 'string') {
-      continue;
-    }
-
-    const existingEntry = nextEntries.find(
-      (entry) =>
-        isPlainObject(entry) &&
-        Array.isArray(entry.hooks) &&
-        entry.hooks.some(
-          (hook) => isPlainObject(hook) && hook.type === 'http' && typeof hook.url === 'string' && hook.url === nextHook.url,
-        ),
-    );
-
-    if (existingEntry && Array.isArray(existingEntry.hooks)) {
-      existingEntry.hooks = existingEntry.hooks.map((hook) => {
-        if (!isPlainObject(hook) || hook.type !== 'http' || hook.url !== nextHook.url) {
-          return hook;
-        }
-
-        return {
-          ...hook,
-          ...nextHook,
-          headers: {
-            ...(isPlainObject(hook.headers) ? hook.headers : {}),
-            ...(isPlainObject(nextHook.headers) ? nextHook.headers : {}),
-          },
-        };
-      });
+    if (!isPlainObject(nextHook)) {
       continue;
     }
 
@@ -165,7 +182,7 @@ function hasInstalledHookEntries(currentEntries, additions) {
 
   return additions.every((addition) => {
     const nextHook = addition.hooks?.[0];
-    if (!isPlainObject(nextHook) || typeof nextHook.url !== 'string') {
+    if (!isPlainObject(nextHook)) {
       return false;
     }
 
@@ -174,14 +191,70 @@ function hasInstalledHookEntries(currentEntries, additions) {
         isPlainObject(entry) &&
         Array.isArray(entry.hooks) &&
         entry.hooks.some(
-          (hook) =>
-            isPlainObject(hook) &&
-            hook.type === 'http' &&
-            typeof hook.url === 'string' &&
-            urlsEquivalent(hook.url, nextHook.url),
+          (hook) => isManagedHookEquivalent(hook, nextHook),
         ),
     );
   });
+}
+
+function isManagedHookEquivalent(currentHook, expectedHook) {
+  if (!isPlainObject(currentHook) || !isPlainObject(expectedHook)) {
+    return false;
+  }
+
+  if (currentHook.type === 'http' && expectedHook.type === 'http') {
+    return typeof currentHook.url === 'string' && typeof expectedHook.url === 'string' && urlsEquivalent(currentHook.url, expectedHook.url);
+  }
+
+  if (currentHook.type === 'command' && expectedHook.type === 'command') {
+    return typeof currentHook.command === 'string' && currentHook.command === expectedHook.command;
+  }
+
+  return false;
+}
+
+function entryContainsManagedSnapclipHook(entry) {
+  if (!isPlainObject(entry) || !Array.isArray(entry.hooks)) {
+    return false;
+  }
+
+  return entry.hooks.some((hook) => isManagedSnapclipHook(hook));
+}
+
+function isManagedSnapclipHook(hook) {
+  if (!isPlainObject(hook)) {
+    return false;
+  }
+
+  if (hook.type === 'http' && typeof hook.url === 'string') {
+    return isSnapclipHookUrl(hook.url);
+  }
+
+  if (hook.type === 'command' && typeof hook.command === 'string') {
+    return hook.command.includes('/hooks/session-start') ||
+      hook.command.includes('/hooks/session-end') ||
+      hook.command.includes('/hooks/user-prompt-submit') ||
+      hook.command.includes('/hooks/pre-tool-use') ||
+      hook.command.includes('/hooks/post-tool-use') ||
+      hook.command.includes('/hooks/post-tool-use-failure') ||
+      hook.command.includes('/hooks/permission-request') ||
+      hook.command.includes('/hooks/stop');
+  }
+
+  return false;
+}
+
+function isSnapclipHookUrl(value) {
+  if (value.startsWith('/hooks/')) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.pathname.startsWith('/hooks/');
+  } catch {
+    return false;
+  }
 }
 
 function urlsEquivalent(left, right) {
@@ -209,6 +282,10 @@ function normalizePort(url) {
   }
 
   return url.protocol === 'https:' ? '443' : '80';
+}
+
+function shellSingleQuote(value) {
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
 }
 
 function isPlainObject(value) {

@@ -35,6 +35,7 @@ export type BridgeSession = {
   id: string;
   workspaceId: string;
   workspaceName?: string | null;
+  target: HandoffTarget;
   label: string;
   surface: string;
   cwd: string;
@@ -70,7 +71,7 @@ export type BridgeDeliveryState =
 
 export type BridgeTaskDelivery = {
   state: BridgeDeliveryState;
-  target: 'bundle_only' | 'claude_session' | 'codex_bundle';
+  target: 'bundle_only' | 'claude_session' | 'codex_session' | 'codex_bundle';
   sessionId: string | null;
   mode?: string;
   stdout?: string | null;

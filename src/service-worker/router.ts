@@ -1,7 +1,7 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { cancelClipOverlay, openSavedClipEditor, startClipWorkflow } from './clipping';
-import { loadBridgeActiveSessions, loadBridgeHealth, loadBridgeSessions, loadBridgeWorkspaces, sendClipToClaudeSession } from './bridge-handoff';
+import { loadBridgeActiveSessions, loadBridgeHealth, loadBridgeSessions, loadBridgeWorkspaces, sendClipToBridgeSession } from './bridge-handoff';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
 import { getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
@@ -140,12 +140,13 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
       const session = await updateClipHandoff(message.clipId, message.handoff);
       return { ok: true, session };
     }
-    case 'send-bridge-claude-session': {
+    case 'send-bridge-session': {
       try {
-        const result = await sendClipToClaudeSession(message);
+        const result = await sendClipToBridgeSession(message);
         return { ok: true, session: result.session, task: result.task };
       } catch (error) {
-        const errorMessage = normalizeBridgeMessageError(error, 'The local Claude session handoff failed.');
+        const targetLabel = message.target === 'codex' ? 'Codex' : 'Claude';
+        const errorMessage = normalizeBridgeMessageError(error, `The local ${targetLabel} session handoff failed.`);
         await chrome.storage.local.set({
           [STORAGE_KEYS.lastLaunchError]: errorMessage,
         });

@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 
 import { createId, nowIso, shortHash, slugify, stableStringify } from './utils.js';
@@ -24,6 +27,7 @@ function createSessionRecord(payload, workspaceId, timestamp, eventName) {
   return {
     id: String(payload.session_id),
     workspaceId,
+    target: 'claude',
     label: `${basename(cwd) || cwd} (${String(payload.session_id).slice(0, 8)})`,
     surface: 'claude_code',
     cwd,
@@ -52,6 +56,117 @@ function createRecentHook(eventName, payload, timestamp) {
   };
 }
 
+function safeReadDirectory(directoryPath) {
+  try {
+    return readdirSync(directoryPath);
+  } catch {
+    return [];
+  }
+}
+
+function safeReadJsonFile(filePath) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function isProcessRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatSessionLabel(cwd, sessionId) {
+  return `${basename(cwd) || cwd} (${String(sessionId).slice(0, 8)})`;
+}
+
+function normalizeIsoTimestamp(value, fallback) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+
+  try {
+    return new Date(value).toISOString();
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeWorkspaceFolders(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => typeof entry === 'string' && entry)
+    .map((entry) => resolve(entry));
+}
+
+function inferSessionSurface(sessionEntry, ideLock) {
+  const ideName = typeof ideLock?.ideName === 'string' ? ideLock.ideName.toLowerCase() : '';
+  const entrypoint = typeof sessionEntry.entrypoint === 'string' ? sessionEntry.entrypoint.toLowerCase() : '';
+
+  if (ideName === 'cursor' || entrypoint === 'claude-vscode') {
+    return 'cursor';
+  }
+
+  if (ideName === 'vscode' || entrypoint.includes('vscode')) {
+    return 'vscode';
+  }
+
+  return 'claude_code';
+}
+
+function inferWorkspaceSource(surface) {
+  if (surface === 'codex') {
+    return 'codex_session';
+  }
+
+  if (surface === 'cursor') {
+    return 'cursor_session';
+  }
+
+  if (surface === 'vscode') {
+    return 'vscode_session';
+  }
+
+  return 'claude_session';
+}
+
+function querySqliteRows(databasePath, sql) {
+  if (!existsSync(databasePath)) {
+    return [];
+  }
+
+  try {
+    const output = execFileSync('sqlite3', [databasePath, '-tabs', sql], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+
+    return output ? output.split('\n').map((line) => line.split('\t')) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isCodexSource(value) {
+  if (typeof value !== 'string' || !value) {
+    return false;
+  }
+
+  return value === 'cli' || value === 'vscode' || value === 'exec';
+}
+
 function createApprovalSummary(approval) {
   return {
     id: approval.id,
@@ -66,6 +181,14 @@ function createApprovalSummary(approval) {
     permissionSuggestions: approval.permissionSuggestions,
     source: approval.source,
   };
+}
+
+function getPendingApprovalCount(session) {
+  if (Array.isArray(session.pendingApprovalIds)) {
+    return session.pendingApprovalIds.length;
+  }
+
+  return Number.isFinite(session.pendingApprovalCount) ? session.pendingApprovalCount : 0;
 }
 
 export class BridgeRegistry {
@@ -105,16 +228,18 @@ export class BridgeRegistry {
   }
 
   listWorkspaces() {
+    const sessions = this.collectSessions();
+
     return Array.from(this.workspaces.values())
       .map((workspace) => {
-        const sessions = Array.from(this.sessions.values()).filter((entry) => entry.workspaceId === workspace.id);
-        const liveSessions = sessions.filter((entry) => entry.status === 'live');
+        const workspaceSessions = sessions.filter((entry) => entry.workspaceId === workspace.id);
+        const liveSessions = workspaceSessions.filter((entry) => entry.status === 'live');
 
         return {
           ...workspace,
           sessionCount: liveSessions.length,
-          totalSessionCount: sessions.length,
-          hiddenSessionCount: Math.max(0, sessions.length - liveSessions.length),
+          totalSessionCount: workspaceSessions.length,
+          hiddenSessionCount: Math.max(0, workspaceSessions.length - liveSessions.length),
         };
       })
       .sort((left, right) => {
@@ -167,13 +292,14 @@ export class BridgeRegistry {
   listSessions(workspaceId, options = {}) {
     const liveOnly = options.liveOnly ?? false;
 
-    return Array.from(this.sessions.values())
+    return this.collectSessions()
       .filter((session) => session.workspaceId === workspaceId)
       .filter((session) => (liveOnly ? session.status === 'live' : true))
       .sort((left, right) => (right.lastSeenAt ?? '').localeCompare(left.lastSeenAt ?? ''))
       .map((session) => ({
         id: session.id,
         workspaceId: session.workspaceId,
+        target: session.target ?? 'claude',
         label: session.label,
         surface: session.surface,
         cwd: session.cwd,
@@ -182,16 +308,17 @@ export class BridgeRegistry {
         activityState: session.activityState,
         windowKey: session.windowKey,
         isWindowPrimary: session.isWindowPrimary,
-        pendingApprovalCount: session.pendingApprovalIds.length,
+        pendingApprovalCount: getPendingApprovalCount(session),
       }));
   }
 
   listActiveSessions() {
+    const sessions = this.collectSessions();
     const workspaceIndex = new Map(
       Array.from(this.workspaces.values()).map((workspace) => [workspace.id, workspace]),
     );
 
-    return Array.from(this.sessions.values())
+    return sessions
       .filter((session) => session.status === 'live')
       .sort((left, right) => (right.lastSeenAt ?? '').localeCompare(left.lastSeenAt ?? ''))
       .map((session) => {
@@ -200,6 +327,7 @@ export class BridgeRegistry {
           id: session.id,
           workspaceId: session.workspaceId,
           workspaceName: workspace?.name ?? session.workspaceId,
+          target: session.target ?? 'claude',
           label: session.label,
           surface: session.surface,
           cwd: session.cwd,
@@ -208,7 +336,7 @@ export class BridgeRegistry {
           activityState: session.activityState,
           windowKey: session.windowKey,
           isWindowPrimary: session.isWindowPrimary,
-          pendingApprovalCount: session.pendingApprovalIds.length,
+          pendingApprovalCount: getPendingApprovalCount(session),
         };
       });
   }
@@ -230,7 +358,10 @@ export class BridgeRegistry {
 
   createTaskRecord(summary) {
     const timestamp = nowIso();
-    const isClaudeResumeTarget = summary.target === 'claude' && typeof summary.sessionId === 'string' && summary.sessionId;
+    const isSessionResumeTarget =
+      (summary.target === 'claude' || summary.target === 'codex') &&
+      typeof summary.sessionId === 'string' &&
+      summary.sessionId;
     const task = {
       id: createId('task'),
       createdAt: timestamp,
@@ -244,10 +375,16 @@ export class BridgeRegistry {
       bundlePath: summary.bundlePath,
       bundleSignature: summary.bundleSignature,
       delivery: {
-        state: isClaudeResumeTarget ? 'queued' : 'bundle_created',
-        target: isClaudeResumeTarget ? 'claude_session' : summary.target === 'codex' ? 'codex_bundle' : 'bundle_only',
+        state: isSessionResumeTarget ? 'queued' : 'bundle_created',
+        target: isSessionResumeTarget
+          ? summary.target === 'codex'
+            ? 'codex_session'
+            : 'claude_session'
+          : summary.target === 'codex'
+            ? 'codex_bundle'
+            : 'bundle_only',
         sessionId: summary.sessionId,
-        mode: isClaudeResumeTarget ? 'claude_resume' : 'bundle_only',
+        mode: isSessionResumeTarget ? (summary.target === 'codex' ? 'codex_resume' : 'claude_resume') : 'bundle_only',
         stdout: null,
         error: null,
       },
@@ -410,5 +547,109 @@ export class BridgeRegistry {
 
   buildBundleSlug(taskRequest) {
     return `${slugify(taskRequest.payload?.title, 'incident')}-${this.buildDeterministicBundleSignature(taskRequest)}`;
+  }
+
+  collectSessions() {
+    const persistedSessions = Array.from(this.sessions.values());
+    const livePersistedIds = new Set(
+      persistedSessions.filter((session) => session.status === 'live').map((session) => session.id),
+    );
+
+    return [
+      ...persistedSessions,
+      ...this.listSupplementalClaudeSessions(livePersistedIds),
+      ...this.listSupplementalCodexSessions(livePersistedIds),
+    ];
+  }
+
+  listSupplementalClaudeSessions(livePersistedIds) {
+    const claudeStateRoot = resolve(this.config.claudeStateRoot ?? resolve(homedir(), '.claude'));
+    const sessionsDirectory = resolve(claudeStateRoot, 'sessions');
+    const ideDirectory = resolve(claudeStateRoot, 'ide');
+    const timestamp = nowIso();
+    const ideLocks = safeReadDirectory(ideDirectory)
+      .filter((fileName) => fileName.endsWith('.lock'))
+      .map((fileName) => safeReadJsonFile(resolve(ideDirectory, fileName)))
+      .filter(Boolean);
+
+    return safeReadDirectory(sessionsDirectory)
+      .filter((fileName) => fileName.endsWith('.json'))
+      .map((fileName) => safeReadJsonFile(resolve(sessionsDirectory, fileName)))
+      .filter((entry) => Boolean(entry) && typeof entry.sessionId === 'string' && typeof entry.cwd === 'string')
+      .filter((entry) => !livePersistedIds.has(entry.sessionId))
+      .filter((entry) => isProcessRunning(Number(entry.pid)))
+      .map((entry) => {
+        const cwd = resolve(entry.cwd);
+        const ideLock = ideLocks.find((lockEntry) => normalizeWorkspaceFolders(lockEntry.workspaceFolders).includes(cwd));
+        const surface = inferSessionSurface(entry, ideLock);
+        const workspace = this.ensureWorkspace(cwd, inferWorkspaceSource(surface), timestamp);
+
+        return {
+          id: entry.sessionId,
+          workspaceId: workspace.id,
+          target: 'claude',
+          label: formatSessionLabel(cwd, entry.sessionId),
+          surface,
+          cwd,
+          lastSeenAt: normalizeIsoTimestamp(entry.startedAt, timestamp),
+          status: 'live',
+          activityState: 'SessionStart',
+          windowKey: typeof ideLock?.authToken === 'string' ? ideLock.authToken : null,
+          isWindowPrimary: true,
+          pendingApprovalCount: 0,
+        };
+      });
+  }
+
+  listSupplementalCodexSessions(livePersistedIds) {
+    const codexStateRoot = resolve(this.config.codexStateRoot ?? resolve(homedir(), '.codex'));
+    const databasePath = resolve(codexStateRoot, 'state_5.sqlite');
+    const timestamp = nowIso();
+    const discoveryWindowSeconds = 8 * 60 * 60;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const rows = querySqliteRows(
+      databasePath,
+      [
+        'select id, source, cwd, title, updated_at',
+        'from threads',
+        `where archived = 0 and updated_at >= ${nowSeconds - discoveryWindowSeconds}`,
+        'order by updated_at desc',
+        'limit 20;',
+      ].join(' '),
+    );
+
+    return rows
+      .map(([id, source, cwd, title, updatedAt]) => ({
+        id,
+        source,
+        cwd,
+        title,
+        updatedAt: Number(updatedAt),
+      }))
+      .filter((entry) => typeof entry.id === 'string' && entry.id)
+      .filter((entry) => !livePersistedIds.has(entry.id))
+      .filter((entry) => typeof entry.cwd === 'string' && entry.cwd)
+      .filter((entry) => isCodexSource(entry.source))
+      .map((entry) => {
+        const cwd = resolve(entry.cwd);
+        const workspace = this.ensureWorkspace(cwd, inferWorkspaceSource('codex'), timestamp);
+        const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+        const labelBase = basename(cwd) || cwd;
+
+        return {
+          id: entry.id,
+          workspaceId: workspace.id,
+          target: 'codex',
+          label: `${labelBase} (Codex ${String(entry.id).slice(0, 6)})`,
+          surface: 'codex',
+          cwd,
+          lastSeenAt: normalizeIsoTimestamp(entry.updatedAt * 1000, timestamp),
+          status: 'live',
+          activityState: title || 'CodexResume',
+          windowKey: null,
+          isWindowPrimary: true,
+          pendingApprovalCount: 0,
+        };
+      });
   }
 }

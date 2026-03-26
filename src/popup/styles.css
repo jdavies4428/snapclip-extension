@@ -145,8 +145,7 @@ button:focus-visible {
   font-size: 23px;
   line-height: 0.96;
   letter-spacing: -0.04em;
-  max-width: 14ch;
-  text-wrap: balance;
+  max-width: none;
 }
 
 .eyebrow {
@@ -175,7 +174,7 @@ button:focus-visible {
 
 .lede {
   font-size: 12px;
-  max-width: 30ch;
+  max-width: none;
 }
 
 .close-button {

@@ -98,10 +98,10 @@ function buildPromptHeader(params: PromptParams): string[] {
     `- Captured at: ${params.activeClip.createdAt}`,
     '',
     'Read these files before responding:',
-    `- \`${contextFileName}\``,
-    `- \`${annotationsFileName}\``,
-    `- \`${screenshotFileName}\``,
-    `- \`${annotatedFileName}\``,
+    `- \`${screenshotFileName}\` — the raw captured clip image`,
+    `- \`${annotatedFileName}\` — the same clip with drawn annotations`,
+    `- \`${contextFileName}\` — structured page, runtime, and Chrome debugger evidence`,
+    `- \`${annotationsFileName}\` — the annotation geometry and note metadata`,
     '',
   ];
 }

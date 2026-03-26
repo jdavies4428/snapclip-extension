@@ -11,8 +11,8 @@ import {
   type BridgeWorkspace,
 } from '../shared/bridge/client';
 import { buildBridgeTaskRequest } from '../shared/bridge/handoff';
-import type { SendBridgeClaudeSessionMessage } from '../shared/messaging/messages';
-import type { HandoffIntent } from '../shared/bridge/client';
+import type { SendBridgeSessionMessage } from '../shared/messaging/messages';
+import type { HandoffIntent, HandoffTarget } from '../shared/bridge/client';
 import type { HandoffScope } from '../shared/ai/prompts';
 import type { EvidenceProfile } from '../shared/export/evidence';
 import type { ClipHandoffRecord, ClipRecord, ClipSession } from '../shared/types/session';
@@ -64,7 +64,7 @@ async function resolveSavedClipForSend(
 }
 
 async function persistClipDraftForSend(
-  params: SendBridgeClaudeSessionMessage,
+  params: SendBridgeSessionMessage,
 ): Promise<{ session: ClipSession; clip: ClipRecord; clipId: string }> {
   const hasExplicitClipId = Boolean(params.clipId?.trim());
   const savedClip = await resolveSavedClipForSend(params.clipId, !params.newClip || hasExplicitClipId);
@@ -83,14 +83,14 @@ async function persistClipDraftForSend(
     const session = await getClipSession();
     const clip = await getStoredClipRecord(savedClip.clipId);
     if (!session || !clip) {
-      throw new Error('The updated clip could not be reloaded for Claude delivery.');
+      throw new Error('The updated clip could not be reloaded for session delivery.');
     }
 
     return { session, clip, clipId: savedClip.clipId };
   }
 
   if (!params.newClip) {
-    throw new Error('Capture a clip first before sending to Claude.');
+    throw new Error('Capture a clip first before sending to an agent session.');
   }
 
   const session = await commitClipToSession({
@@ -107,12 +107,12 @@ async function persistClipDraftForSend(
   });
   const clipId = session.activeClipId ?? session.clips.at(-1)?.id ?? '';
   if (!clipId) {
-    throw new Error('The new clip could not be saved before Claude delivery.');
+    throw new Error('The new clip could not be saved before session delivery.');
   }
 
   const clip = await getStoredClipRecord(clipId);
   if (!clip) {
-    throw new Error('The saved clip could not be reloaded for Claude delivery.');
+    throw new Error('The saved clip could not be reloaded for session delivery.');
   }
 
   return { session, clip, clipId };
@@ -168,12 +168,13 @@ export async function loadBridgeActiveSessions(): Promise<BridgeSession[]> {
   return listBridgeActiveSessions();
 }
 
-export async function sendClipToClaudeSession(
-  params: SendBridgeClaudeSessionMessage,
+export async function sendClipToBridgeSession(
+  params: SendBridgeSessionMessage,
 ): Promise<{ session: ClipSession; task: BridgeTask }> {
   const { session, clip, clipId } = await persistClipDraftForSend(params);
   const draftTitle = params.draftTitle?.trim() || clip.title;
   const draftNote = params.draftNote ?? clip.note;
+  const target = params.target;
   const workspaceId = params.workspaceId.trim();
   const sessionId = params.sessionId.trim();
   const intent = params.intent ?? 'fix';
@@ -184,7 +185,10 @@ export async function sendClipToClaudeSession(
     listBridgeSessions(workspaceId).catch(() => []),
   ]);
   const workspaceName = resolveWorkspaceName(workspaces, workspaceId);
-  const sessionLabel = resolveSessionLabel(liveSessions, sessionId);
+  const sessionLabel = resolveSessionLabel(
+    liveSessions.filter((session) => session.target === target),
+    sessionId,
+  );
   const sessionForBundle = {
     ...session,
     clips: session.clips.map((existingClip) =>
@@ -201,7 +205,7 @@ export async function sendClipToClaudeSession(
   const request = await buildBridgeTaskRequest({
     workspaceId,
     sessionId,
-    target: 'claude',
+    target,
     intent,
     scope,
     evidenceProfile,

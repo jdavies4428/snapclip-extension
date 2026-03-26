@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -35,12 +36,16 @@ function createBaseTask(workspaceId, overrides = {}) {
 
 async function startTestBridge(options = {}) {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'snapclip-bridge-'));
+  const claudeStateRoot = options.claudeStateRoot ?? (await mkdtemp(join(tmpdir(), 'snapclip-claude-state-')));
   const claudeProjectsRoot = options.claudeProjectsRoot ?? (await mkdtemp(join(tmpdir(), 'snapclip-claude-projects-')));
+  const codexStateRoot = options.codexStateRoot ?? (await mkdtemp(join(tmpdir(), 'snapclip-codex-state-')));
   const bridge = createBridgeServer({
     host: '127.0.0.1',
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    claudeStateRoot,
+    codexStateRoot,
     claudeProjectsRoot,
     claudeRunner: async () => ({ stdout: 'submitted', stderr: '', code: 0 }),
     ...options,
@@ -50,7 +55,38 @@ async function startTestBridge(options = {}) {
   const address = bridge.server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  return { bridge, workspaceRoot, baseUrl, claudeProjectsRoot };
+  return { bridge, workspaceRoot, baseUrl, claudeProjectsRoot, claudeStateRoot, codexStateRoot };
+}
+
+async function seedCodexThreadsDatabase(codexStateRoot, rows) {
+  const databasePath = join(codexStateRoot, 'state_5.sqlite');
+  const statements = [
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      rollout_path TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      model_provider TEXT NOT NULL,
+      cwd TEXT NOT NULL,
+      title TEXT NOT NULL,
+      sandbox_policy TEXT NOT NULL,
+      approval_mode TEXT NOT NULL,
+      tokens_used INTEGER NOT NULL DEFAULT 0,
+      has_user_event INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0
+    );`,
+    ...rows.map((row) =>
+      [
+        'INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode, archived)',
+        `VALUES ('${row.id}', '${row.rolloutPath ?? ''}', ${row.createdAt}, ${row.updatedAt}, '${row.source}', 'openai', '${row.cwd}', '${row.title}', 'danger-full-access', 'never', ${row.archived ?? 0});`,
+      ].join(' '),
+    ),
+  ];
+
+  execFileSync('sqlite3', [databasePath, statements.join('\n')], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 async function bridgeFetch(baseUrl, path, init = {}) {
@@ -155,6 +191,90 @@ test('active sessions are listed across workspaces without requiring workspace s
   assert.equal(typeof active.payload.sessions[0].workspaceName, 'string');
 });
 
+test('active sessions include live Cursor-backed Claude sessions from local session state', async (t) => {
+  const claudeStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-claude-state-'));
+  const cursorWorkspace = await mkdtemp(join(tmpdir(), 'snapclip-cursor-workspace-'));
+  await mkdir(join(claudeStateRoot, 'sessions'), { recursive: true });
+  await mkdir(join(claudeStateRoot, 'ide'), { recursive: true });
+  await writeFile(
+    join(claudeStateRoot, 'sessions', '40287.json'),
+    JSON.stringify({
+      pid: process.pid,
+      sessionId: 'cursor-session-1',
+      cwd: cursorWorkspace,
+      startedAt: Date.now(),
+      kind: 'interactive',
+      entrypoint: 'claude-vscode',
+    }),
+  );
+  await writeFile(
+    join(claudeStateRoot, 'ide', '30304.lock'),
+    JSON.stringify({
+      pid: 623,
+      workspaceFolders: [cursorWorkspace],
+      ideName: 'Cursor',
+      transport: 'ws',
+      authToken: 'cursor-auth-token',
+    }),
+  );
+
+  const { bridge, baseUrl } = await startTestBridge({ claudeStateRoot });
+  t.after(async () => {
+    await bridge.close();
+  });
+
+  const active = await bridgeFetch(baseUrl, '/sessions/active');
+  assert.equal(active.response.status, 200);
+  assert.equal(active.payload.sessions.some((session) => session.id === 'cursor-session-1'), true);
+
+  const cursorSession = active.payload.sessions.find((session) => session.id === 'cursor-session-1');
+  assert.equal(cursorSession.surface, 'cursor');
+  assert.equal(cursorSession.cwd, cursorWorkspace);
+  assert.equal(typeof cursorSession.workspaceName, 'string');
+});
+
+test('active sessions include recent Codex threads from the local Codex state database', async (t) => {
+  const codexStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-codex-state-'));
+  const codexWorkspace = await mkdtemp(join(tmpdir(), 'snapclip-codex-workspace-'));
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await seedCodexThreadsDatabase(codexStateRoot, [
+    {
+      id: 'codex-thread-1',
+      cwd: codexWorkspace,
+      title: 'Fix clipped CTA',
+      source: 'vscode',
+      createdAt: nowSeconds - 60,
+      updatedAt: nowSeconds - 15,
+      rolloutPath: 'sessions/2026/03/26/codex-thread-1.jsonl',
+    },
+    {
+      id: 'codex-thread-old',
+      cwd: codexWorkspace,
+      title: 'Old archived work',
+      source: 'vscode',
+      createdAt: nowSeconds - 10 * 60 * 60,
+      updatedAt: nowSeconds - 9 * 60 * 60,
+      rolloutPath: 'sessions/2026/03/26/codex-thread-old.jsonl',
+    },
+  ]);
+
+  const { bridge, baseUrl } = await startTestBridge({ codexStateRoot });
+  t.after(async () => {
+    await bridge.close();
+  });
+
+  const active = await bridgeFetch(baseUrl, '/sessions/active');
+  assert.equal(active.response.status, 200);
+  assert.equal(active.payload.sessions.some((session) => session.id === 'codex-thread-1'), true);
+  assert.equal(active.payload.sessions.some((session) => session.id === 'codex-thread-old'), false);
+
+  const codexSession = active.payload.sessions.find((session) => session.id === 'codex-thread-1');
+  assert.equal(codexSession.target, 'codex');
+  assert.equal(codexSession.surface, 'codex');
+  assert.equal(codexSession.cwd, codexWorkspace);
+  assert.equal(typeof codexSession.workspaceName, 'string');
+});
+
 test('creating an export task writes a deterministic bundle and completes immediately', async (t) => {
   const { bridge, baseUrl } = await startTestBridge();
   t.after(async () => {
@@ -188,12 +308,14 @@ test('creating an export task writes a deterministic bundle and completes immedi
 
 test('claude task delivery is queued and can be polled to completion', async (t) => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'snapclip-bridge-'));
+  const claudeStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-claude-state-'));
   const capturedCalls = [];
   const bridge = createBridgeServer({
     host: '127.0.0.1',
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    claudeStateRoot,
     claudeRunner: async (input) => {
       await new Promise((resolve) => setTimeout(resolve, 40));
       capturedCalls.push(input);
@@ -233,6 +355,60 @@ test('claude task delivery is queued and can be polled to completion', async (t)
   assert.equal(capturedCalls[0].sessionId, 'claude-session-1');
   assert.equal(capturedCalls[0].cwd, workspaceRoot);
   assert.match(capturedCalls[0].prompt, /prompt-claude\.md/);
+});
+
+test('codex task delivery is queued and resumes the target session with both images', async (t) => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), 'snapclip-bridge-'));
+  const claudeStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-claude-state-'));
+  const codexStateRoot = await mkdtemp(join(tmpdir(), 'snapclip-codex-state-'));
+  const capturedCalls = [];
+  const bridge = createBridgeServer({
+    host: '127.0.0.1',
+    port: 0,
+    token: 'test-token',
+    cwd: workspaceRoot,
+    claudeStateRoot,
+    codexStateRoot,
+    codexRunner: async (input) => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      capturedCalls.push(input);
+      return { stdout: 'resume submitted', stderr: '', code: 0 };
+    },
+  });
+
+  await bridge.listen();
+  const address = bridge.server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  t.after(async () => {
+    await bridge.close();
+  });
+
+  const workspaces = await bridgeFetch(baseUrl, '/workspaces');
+  const workspaceId = workspaces.payload.workspaces[0].id;
+
+  const created = await bridgeFetch(baseUrl, '/tasks', {
+    method: 'POST',
+    body: JSON.stringify(
+      createBaseTask(workspaceId, {
+        target: 'codex',
+        sessionId: 'codex-thread-1',
+      }),
+    ),
+  });
+
+  assert.equal(created.response.status, 200);
+  assert.equal(created.payload.status, 'accepted');
+  assert.equal(created.payload.delivery.state, 'queued');
+
+  const taskDetails = await waitForTaskStatus(baseUrl, created.payload.taskId, 'completed');
+  assert.equal(taskDetails.payload.delivery.state, 'delivered');
+  assert.equal(taskDetails.payload.delivery.target, 'codex_session');
+  assert.equal(capturedCalls.length, 1);
+  assert.equal(capturedCalls[0].sessionId, 'codex-thread-1');
+  assert.equal(capturedCalls[0].cwd, workspaceRoot);
+  assert.deepEqual(capturedCalls[0].imagePaths, ['screenshot.png', 'annotated.png']);
+  assert.match(capturedCalls[0].prompt, /prompt-codex\.md/);
 });
 
 test('permission requests can be discovered and resolved through the public approval API', async (t) => {

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { writeTaskBundle } from './bundles.js';
 import { runClaudeResume, buildClaudeResumePrompt, probeClaudeCli } from './claude.js';
+import { runCodexResume, buildCodexResumePrompt } from './codex.js';
 import { resolveBridgeConfig } from './config.js';
 import {
   buildClaudeHookConfig,
@@ -25,6 +26,7 @@ export function createBridgeServer(options = {}) {
   const config = resolveBridgeConfig(options);
   const registry = options.registry ?? new BridgeRegistry(config);
   const claudeRunner = options.claudeRunner ?? runClaudeResume;
+  const codexRunner = options.codexRunner ?? runCodexResume;
   const claudeProbe = options.claudeProbe ?? probeClaudeCli;
   const clock = options.clock ?? (() => new Date());
   const taskJobs = new Set();
@@ -174,6 +176,7 @@ export function createBridgeServer(options = {}) {
             workspacePath: workspace.path,
             bundlePath,
             claudeRunner,
+            codexRunner,
           });
 
           sendJson(response, 200, {
@@ -190,6 +193,7 @@ export function createBridgeServer(options = {}) {
           workspacePath: workspace.path,
           bundlePath,
           claudeRunner,
+          codexRunner,
         });
 
         const updatedTask = registry.updateTask(task.id, delivery);
@@ -332,19 +336,19 @@ async function readBridgeJsonBody(request) {
 }
 
 function shouldQueueTaskDelivery(taskRequest) {
-  return taskRequest.target === 'claude' && Boolean(taskRequest.sessionId);
+  return (taskRequest.target === 'claude' || taskRequest.target === 'codex') && Boolean(taskRequest.sessionId);
 }
 
-function queueTaskDelivery({ taskJobs, registry, task, taskRequest, workspacePath, bundlePath, claudeRunner }) {
+function queueTaskDelivery({ taskJobs, registry, task, taskRequest, workspacePath, bundlePath, claudeRunner, codexRunner }) {
   queueMicrotask(() => {
     const job = (async () => {
       registry.updateTask(task.id, {
         status: 'in_progress',
         delivery: {
           state: 'delivering',
-          target: 'claude_session',
+          target: taskRequest.target === 'codex' ? 'codex_session' : 'claude_session',
           sessionId: taskRequest.sessionId,
-          mode: 'claude_resume',
+          mode: taskRequest.target === 'codex' ? 'codex_resume' : 'claude_resume',
           stdout: null,
           error: null,
         },
@@ -355,6 +359,7 @@ function queueTaskDelivery({ taskJobs, registry, task, taskRequest, workspacePat
         workspacePath,
         bundlePath,
         claudeRunner,
+        codexRunner,
       });
 
       registry.updateTask(task.id, delivery);
@@ -364,11 +369,11 @@ function queueTaskDelivery({ taskJobs, registry, task, taskRequest, workspacePat
           status: 'failed',
           delivery: {
             state: 'failed_after_bundle_creation',
-            target: 'claude_session',
+            target: taskRequest.target === 'codex' ? 'codex_session' : 'claude_session',
             sessionId: taskRequest.sessionId,
-            mode: 'claude_resume',
+            mode: taskRequest.target === 'codex' ? 'codex_resume' : 'claude_resume',
             stdout: null,
-            error: error instanceof Error ? error.message : 'Claude delivery failed.',
+            error: error instanceof Error ? error.message : `${taskRequest.target === 'codex' ? 'Codex' : 'Claude'} delivery failed.`,
           },
         });
       })
@@ -380,13 +385,13 @@ function queueTaskDelivery({ taskJobs, registry, task, taskRequest, workspacePat
   });
 }
 
-async function deliverTask({ taskRequest, workspacePath, bundlePath, claudeRunner }) {
-  if (taskRequest.target !== 'claude') {
+async function deliverTask({ taskRequest, workspacePath, bundlePath, claudeRunner, codexRunner }) {
+  if (taskRequest.target !== 'claude' && taskRequest.target !== 'codex') {
     return {
       status: 'completed',
       delivery: {
         state: 'bundle_created',
-        target: taskRequest.target === 'codex' ? 'codex_bundle' : 'bundle_only',
+        target: 'bundle_only',
         sessionId: taskRequest.sessionId,
         mode: 'bundle_only',
       },
@@ -398,7 +403,7 @@ async function deliverTask({ taskRequest, workspacePath, bundlePath, claudeRunne
       status: 'completed',
       delivery: {
         state: 'bundle_created',
-        target: 'bundle_only',
+        target: taskRequest.target === 'codex' ? 'codex_bundle' : 'bundle_only',
         sessionId: null,
         mode: 'bundle_only',
       },
@@ -406,20 +411,24 @@ async function deliverTask({ taskRequest, workspacePath, bundlePath, claudeRunne
   }
 
   try {
-    const prompt = buildClaudeResumePrompt(bundlePath, taskRequest.payload.artifacts.promptClaude, workspacePath);
-    const result = await claudeRunner({
+    const isCodexTarget = taskRequest.target === 'codex';
+    const prompt = isCodexTarget
+      ? buildCodexResumePrompt(bundlePath, taskRequest.payload.artifacts.promptCodex, workspacePath)
+      : buildClaudeResumePrompt(bundlePath, taskRequest.payload.artifacts.promptClaude, workspacePath);
+    const result = await (isCodexTarget ? codexRunner : claudeRunner)({
       sessionId: taskRequest.sessionId,
       prompt,
       cwd: resolve(workspacePath),
+      imagePaths: isCodexTarget ? ['screenshot.png', 'annotated.png'] : undefined,
     });
 
     return {
       status: 'completed',
       delivery: {
         state: 'delivered',
-        target: 'claude_session',
+        target: isCodexTarget ? 'codex_session' : 'claude_session',
         sessionId: taskRequest.sessionId,
-        mode: 'claude_resume',
+        mode: isCodexTarget ? 'codex_resume' : 'claude_resume',
         stdout: result.stdout || null,
         error: null,
       },
@@ -429,11 +438,11 @@ async function deliverTask({ taskRequest, workspacePath, bundlePath, claudeRunne
       status: 'failed',
       delivery: {
         state: 'failed_after_bundle_creation',
-        target: 'claude_session',
+        target: taskRequest.target === 'codex' ? 'codex_session' : 'claude_session',
         sessionId: taskRequest.sessionId,
-        mode: 'claude_resume',
+        mode: taskRequest.target === 'codex' ? 'codex_resume' : 'claude_resume',
         stdout: error?.stdout ?? null,
-        error: error instanceof Error ? error.message : 'Claude delivery failed.',
+        error: error instanceof Error ? error.message : `${taskRequest.target === 'codex' ? 'Codex' : 'Claude'} delivery failed.`,
       },
     };
   }

@@ -1,4 +1,4 @@
-import type { HandoffIntent, BridgeHealth, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
+import type { HandoffIntent, HandoffTarget, BridgeHealth, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
 import type { EvidenceProfile } from '../export/evidence';
 import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
 import type { HandoffScope } from '../ai/prompts';
@@ -55,8 +55,9 @@ export type GetBridgeActiveSessionsMessage = {
   type: 'get-bridge-active-sessions';
 };
 
-export type SendBridgeClaudeSessionMessage = {
-  type: 'send-bridge-claude-session';
+export type SendBridgeSessionMessage = {
+  type: 'send-bridge-session';
+  target: Extract<HandoffTarget, 'claude' | 'codex'>;
   workspaceId: string;
   sessionId: string;
   clipId?: string;
@@ -140,7 +141,7 @@ export type SnapClipMessage =
   | GetBridgeWorkspacesMessage
   | GetBridgeSessionsMessage
   | GetBridgeActiveSessionsMessage
-  | SendBridgeClaudeSessionMessage
+  | SendBridgeSessionMessage
   | UpdateClipTitleMessage
   | UpdateClipNoteMessage
   | UpdateClipAnnotationsMessage

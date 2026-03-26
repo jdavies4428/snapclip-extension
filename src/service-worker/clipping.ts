@@ -1228,6 +1228,8 @@ function mountClipOverlay(
       detailsHead.style.justifyContent = 'space-between';
       detailsHead.style.gap = '18px';
       detailsHead.style.padding = '2px 0 0';
+      detailsHead.style.paddingRight = '72px';
+      detailsHead.style.flexWrap = 'wrap';
 
       const detailsTitleBlock = document.createElement('div');
       detailsTitleBlock.style.display = 'grid';
@@ -1253,7 +1255,7 @@ function mountClipOverlay(
 
       const detailsLead = document.createElement('p');
       detailsLead.textContent =
-        'What happened left. Why it failed right.';
+        'What happened left. Why it failed right. Counts reflect events captured for this clip after the runtime monitor attached.';
       detailsLead.style.margin = '0';
       detailsLead.style.color = '#b7c4da';
       detailsLead.style.fontSize = '12px';
@@ -1264,6 +1266,8 @@ function mountClipOverlay(
       detailsActions.style.alignItems = 'center';
       detailsActions.style.gap = '8px';
       detailsActions.style.flexWrap = 'wrap';
+      detailsActions.style.justifyContent = 'flex-end';
+      detailsActions.style.maxWidth = 'calc(100% - 72px)';
 
       const copyDebugButton = document.createElement('button');
       copyDebugButton.textContent = 'Copy report';
@@ -1352,7 +1356,9 @@ function mountClipOverlay(
       })();
       const summaryLines = [
         runtimeSummary ? `${runtimeSummary.eventCount} runtime events seen` : 'No runtime monitor data',
-        runtimeSummary ? `${runtimeSummary.errorCount} errors, ${runtimeSummary.warningCount} warnings` : 'No errors or warnings captured',
+        runtimeSummary
+          ? `${runtimeSummary.errorCount} runtime errors, ${runtimeSummary.warningCount} runtime warnings`
+          : 'No errors or warnings captured',
         runtimeSummary
           ? `${runtimeSummary.failedRequestCount} failed requests, ${runtimeSummary.slowRequestCount} slow requests`
           : 'No network diagnostics captured',
@@ -3018,7 +3024,9 @@ function mountClipOverlay(
         id: string;
         workspaceId: string;
         workspaceName?: string | null;
+        target: 'claude' | 'codex';
         label: string;
+        surface?: string;
         pendingApprovalCount?: number;
       };
 
@@ -3104,16 +3112,17 @@ function mountClipOverlay(
         }
       };
 
-      const getClaudeTaskStatusMessage = (
-        task: { delivery: { state: string; error?: string | null } },
+      const getSessionTaskStatusMessage = (
+        task: { target?: string; delivery: { state: string; error?: string | null } },
         sessionLabel: string,
       ) => {
+        const targetLabel = task.target === 'codex' ? 'Codex' : 'Claude';
         if (task.delivery.state === 'delivered') {
           return `Sent to ${sessionLabel}. The local incident packet was preserved.`;
         }
 
         if (task.delivery.state === 'failed_after_bundle_creation') {
-          return `Claude delivery to ${sessionLabel} failed after bundle creation. The local packet was preserved.`;
+          return `${targetLabel} delivery to ${sessionLabel} failed after bundle creation. The local packet was preserved.`;
         }
 
         if (task.delivery.state === 'bundle_created') {
@@ -3139,7 +3148,7 @@ function mountClipOverlay(
           labelBlock.style.gap = '4px';
 
           const eyebrow = document.createElement('div');
-          eyebrow.textContent = 'CLAUDE SESSIONS';
+          eyebrow.textContent = 'SEND TO AGENT';
           eyebrow.style.color = '#88d5ff';
           eyebrow.style.fontSize = mode === 'rail' ? '11px' : '10px';
           eyebrow.style.fontWeight = '700';
@@ -3149,8 +3158,8 @@ function mountClipOverlay(
           const copy = document.createElement('div');
           copy.textContent =
             mode === 'rail'
-              ? 'Send this clip directly into a live Claude session when the local companion is ready.'
-              : 'Send this clip directly from the debug report.';
+              ? 'Send this clip one-way into a live Claude or Codex session when the local companion is ready.'
+              : 'Send this clip one-way from the debug report.';
           copy.style.color = '#b7c4da';
           copy.style.fontSize = mode === 'rail' ? '12px' : '11px';
           copy.style.lineHeight = '1.45';
@@ -3251,21 +3260,21 @@ function mountClipOverlay(
                   : 'rgba(255,255,255,0.08)';
               sessionButton.style.color = '#edf3fb';
               sessionButton.addEventListener('click', () => {
-                void sendToClaudeSession(session);
+                void sendToAgentSession(session);
               });
               sessionRow.append(sessionButton);
             });
           } else {
             const empty = document.createElement('div');
             empty.textContent = isBridgeLoading
-              ? 'Loading live Claude sessions...'
+              ? 'Loading live agent sessions...'
               : bridgeDiscoveryMode === 'active'
-                ? 'No live Claude sessions are open right now.'
+                ? 'No live agent sessions are open right now.'
                 : selectedWorkspaceId
-                ? 'No live Claude sessions were found in the fallback workspace view.'
+                ? 'No live agent sessions were found in the fallback workspace view.'
                 : bridgeWorkspaces.length
                   ? 'No live sessions were found yet.'
-                  : 'No live Claude sessions were found.';
+                  : 'No live agent sessions were found.';
             empty.style.color = '#9db2cf';
             empty.style.fontSize = '12px';
             empty.style.lineHeight = '1.45';
@@ -3279,21 +3288,27 @@ function mountClipOverlay(
           status.style.fontSize = '12px';
           status.style.fontWeight = '600';
           status.style.lineHeight = '1.45';
-          status.textContent =
-            bridgeStatusMessage ||
-            (bridgeHealthState === 'unavailable'
-              ? 'Install or start the local companion to send clips directly into Claude.'
-              : bridgeHealthState === 'claude_unavailable'
-                ? 'The local companion is running, but Claude Code is not available here yet.'
-                : bridgeHealthState === 'hooks_missing'
-                  ? 'The local companion is running. Install Claude hooks to discover live sessions automatically.'
-                  : bridgeHealthSummary
-                    ? bridgeHealthSummary
-              : bridgeDiscoveryMode === 'active'
-              ? 'Live sessions were discovered directly from the local bridge.'
-              : bridgeWorkspaces.length
-              ? 'Live sessions are discovered through the local bridge and stay local unless you send them.'
-              : 'Start the local bridge and Claude hooks to enable direct send.');
+          const hasLiveBridgeSessions = bridgeSessions.length > 0;
+          let defaultBridgeStatus = 'Start the local companion to enable one-way agent handoff.';
+          if (hasLiveBridgeSessions) {
+            defaultBridgeStatus = selectedClaudeSessionId
+              ? 'A live agent session is ready. Send includes the screenshot, annotated image, and local evidence packet.'
+              : 'Live agent sessions were found and stay local unless you send them. The handoff includes the screenshot, annotated image, and local evidence packet.';
+          } else if (bridgeHealthState === 'unavailable') {
+            defaultBridgeStatus = 'Install or start the local companion to send clips directly into a live agent session.';
+          } else if (bridgeHealthState === 'claude_unavailable') {
+            defaultBridgeStatus =
+              'The local companion is running, but Claude CLI discovery is not available here yet. Codex sessions may still appear if local state is available.';
+          } else if (bridgeHealthState === 'hooks_missing') {
+            defaultBridgeStatus = 'The local companion is running. Install Claude hooks to keep Claude sessions discoverable automatically.';
+          } else if (bridgeHealthSummary) {
+            defaultBridgeStatus = bridgeHealthSummary;
+          } else if (bridgeDiscoveryMode === 'active') {
+            defaultBridgeStatus = 'Live sessions were discovered directly from the local bridge.';
+          } else if (bridgeWorkspaces.length) {
+            defaultBridgeStatus = 'Live sessions are discovered through the local bridge and stay local unless you send them.';
+          }
+          status.textContent = bridgeStatusMessage || defaultBridgeStatus;
           styleClaudeStatus(status, bridgeStatusTone);
 
           root.append(head, sessionRow, status);
@@ -3333,7 +3348,7 @@ function mountClipOverlay(
             ? bridgeHealth.claude.hookInstalled
               ? 'Local companion connected.'
               : 'Local companion connected. Claude hooks are not installed yet.'
-            : 'Local companion connected. Claude Code is not available yet.';
+            : 'Local companion connected. Claude discovery is not available yet.';
           bridgeHealthState = !bridgeHealth.claude.cliAvailable
             ? 'claude_unavailable'
             : !bridgeHealth.claude.hookInstalled
@@ -3350,13 +3365,17 @@ function mountClipOverlay(
                 id: string;
                 workspaceId: string;
                 workspaceName?: string | null;
+                target: 'claude' | 'codex';
                 label: string;
+                surface?: string;
                 pendingApprovalCount?: number;
               }) => ({
                 id: session.id,
                 workspaceId: session.workspaceId,
                 workspaceName: session.workspaceName ?? null,
+                target: session.target,
                 label: session.label,
+                surface: session.surface,
                 pendingApprovalCount: session.pendingApprovalCount,
               }));
 
@@ -3428,7 +3447,7 @@ function mountClipOverlay(
           if (!selectedWorkspaceId) {
             bridgeSessions = [];
             bridgeStatusMessage = bridgeWorkspaces.length
-              ? 'Pick a workspace to inspect live Claude sessions.'
+              ? 'Pick a workspace to inspect live agent sessions.'
               : 'The local bridge returned no workspaces.';
             bridgeStatusTone = bridgeWorkspaces.length ? 'default' : 'error';
             await persistBridgeSelection('', '');
@@ -3452,13 +3471,17 @@ function mountClipOverlay(
             id: string;
             workspaceId?: string;
             workspaceName?: string | null;
+            target: 'claude' | 'codex';
             label: string;
+            surface?: string;
             pendingApprovalCount?: number;
           }) => ({
             id: session.id,
             workspaceId: session.workspaceId || selectedWorkspaceId,
             workspaceName: session.workspaceName ?? null,
+            target: session.target,
             label: session.label,
+            surface: session.surface,
             pendingApprovalCount: session.pendingApprovalCount,
           }));
           selectedClaudeSessionId = pickSessionId(
@@ -3482,7 +3505,7 @@ function mountClipOverlay(
         }
       };
 
-      const sendToClaudeSession = async (targetSession: OverlayBridgeSession) => {
+      const sendToAgentSession = async (targetSession: OverlayBridgeSession) => {
         if (isBridgeSending) {
           return;
         }
@@ -3496,6 +3519,7 @@ function mountClipOverlay(
         successfulClaudeSessionId = '';
         selectedClaudeSessionId = targetSession.id;
         selectedWorkspaceId = targetSession.workspaceId || selectedWorkspaceId;
+        const targetLabel = targetSession.target === 'codex' ? 'Codex' : 'Claude';
         bridgeStatusMessage = `Sending to ${targetSession.label}...`;
         bridgeStatusTone = 'default';
         renderClaudeSessionSurfaces();
@@ -3504,7 +3528,8 @@ function mountClipOverlay(
 
         try {
           const response = await chrome.runtime.sendMessage({
-            type: 'send-bridge-claude-session',
+            type: 'send-bridge-session',
+            target: targetSession.target,
             workspaceId: selectedWorkspaceId,
             sessionId: targetSession.id,
             clipId: currentClip?.clipId,
@@ -3533,7 +3558,7 @@ function mountClipOverlay(
           });
 
           if (!response?.ok || !response.task) {
-            throw new Error(response?.error || 'The local Claude session handoff failed.');
+            throw new Error(response?.error || 'The local session handoff failed.');
           }
 
           const resultingClipId = currentClip?.clipId || response.session?.activeClipId || '';
@@ -3549,7 +3574,7 @@ function mountClipOverlay(
           syncSaveButtonLabel();
 
           successfulClaudeSessionId = targetSession.id;
-          bridgeStatusMessage = getClaudeTaskStatusMessage(response.task, targetSession.label);
+          bridgeStatusMessage = getSessionTaskStatusMessage(response.task, targetSession.label);
           bridgeStatusTone = response.task.delivery.state === 'failed_after_bundle_creation' ? 'error' : 'success';
           setActionStatus(
             bridgeStatusMessage,
@@ -3578,9 +3603,9 @@ function mountClipOverlay(
             }
           }
           bridgeStatusMessage =
-            error instanceof Error ? error.message : 'The local Claude session handoff failed.';
+            error instanceof Error ? error.message : `The local ${targetLabel} session handoff failed.`;
           bridgeStatusTone = 'error';
-          setActionStatus('Claude session send failed.', 'error');
+          setActionStatus(`${targetLabel} session send failed.`, 'error');
           announce(bridgeStatusMessage, 'error');
         } finally {
           isBridgeSending = false;
