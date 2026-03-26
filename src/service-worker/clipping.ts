@@ -1247,14 +1247,14 @@ function mountClipOverlay(
       detailsEyebrow.style.textTransform = 'uppercase';
 
       const detailsTitle = document.createElement('h3');
-      detailsTitle.textContent = 'Readable debug report';
+      detailsTitle.textContent = 'Debug inspector';
       detailsTitle.style.margin = '0';
       detailsTitle.style.fontSize = '22px';
       detailsTitle.style.color = '#eef4fb';
 
       const detailsLead = document.createElement('p');
       detailsLead.textContent =
-        'A calm summary of what this clip captured. Chrome does not show a separate per-clip approval here; richer Chrome data uses the extension debugger permission locally when available.';
+        'Browse clip evidence the way Jam does: environment, console, network, actions, and AI handoff, all attached to this local capture.';
       detailsLead.style.margin = '0';
       detailsLead.style.color = '#b7c4da';
       detailsLead.style.fontSize = '14px';
@@ -1623,6 +1623,7 @@ function mountClipOverlay(
 
       type InsightTone = 'default' | 'error' | 'warn';
       type InsightRow = { label: string; value: string; tone?: InsightTone };
+      type DebugInspectorTab = 'info' | 'console' | 'network' | 'actions' | 'ai';
 
       const overviewStrip = document.createElement('div');
       overviewStrip.style.display = 'grid';
@@ -1853,11 +1854,171 @@ function mountClipOverlay(
       );
       consoleCard.append(makeInsightList(consoleHighlights, 'No runtime errors or warnings were captured for this clip.'));
 
+      const makeStreamRows = (
+        items: Array<{
+          eyebrow: string;
+          title: string;
+          detail?: string | null;
+          tone?: InsightTone;
+        }>,
+        emptyText: string,
+      ) => {
+        const list = document.createElement('div');
+        list.style.display = 'grid';
+        list.style.gap = '10px';
+
+        if (!items.length) {
+          list.append(makeEmptyInspectorMessage(emptyText));
+          return list;
+        }
+
+        items.forEach((entry) => {
+          const row = document.createElement('div');
+          row.style.display = 'grid';
+          row.style.gap = '6px';
+          row.style.padding = '12px 14px';
+          row.style.borderRadius = '14px';
+          row.style.border =
+            entry.tone === 'error'
+              ? '1px solid rgba(255, 132, 95, 0.24)'
+              : entry.tone === 'warn'
+                ? '1px solid rgba(255, 196, 94, 0.22)'
+                : '1px solid rgba(157, 177, 207, 0.14)';
+          row.style.background =
+            entry.tone === 'error'
+              ? 'rgba(105, 31, 40, 0.2)'
+              : entry.tone === 'warn'
+                ? 'rgba(82, 61, 17, 0.2)'
+                : 'rgba(255, 255, 255, 0.035)';
+
+          const eyebrow = document.createElement('div');
+          eyebrow.textContent = entry.eyebrow;
+          eyebrow.style.color = '#88a2c6';
+          eyebrow.style.fontSize = '11px';
+          eyebrow.style.fontWeight = '700';
+          eyebrow.style.letterSpacing = '0.08em';
+          eyebrow.style.textTransform = 'uppercase';
+
+          const title = document.createElement('div');
+          title.textContent = entry.title;
+          title.style.color = '#eef4fb';
+          title.style.fontSize = '13px';
+          title.style.lineHeight = '1.5';
+          title.style.wordBreak = 'break-word';
+
+          row.append(eyebrow, title);
+
+          if (entry.detail) {
+            const detail = document.createElement('div');
+            detail.textContent = entry.detail;
+            detail.style.color = '#9db2cf';
+            detail.style.fontSize = '12px';
+            detail.style.lineHeight = '1.5';
+            detail.style.wordBreak = 'break-word';
+            row.append(detail);
+          }
+
+          list.append(row);
+        });
+
+        return list;
+      };
+
+      const consoleDetailItems =
+        runtimeContext?.events.map((entry) => ({
+          eyebrow: `${entry.level.toUpperCase()} • ${entry.type.replaceAll('_', ' ')}`,
+          title: entry.message,
+          detail: [entry.source, entry.url, entry.title, entry.timestamp].filter(Boolean).join(' • '),
+          tone: entry.level === 'error' ? ('error' as const) : entry.level === 'warn' ? ('warn' as const) : ('default' as const),
+        })) ?? [];
+
+      const consoleDetailCard = makeSectionCard(
+        'Console and runtime',
+        consoleDetailItems.length ? 'Full event stream captured by the page monitor.' : 'No runtime events were captured.',
+      );
+      consoleDetailCard.append(
+        makeStreamRows(consoleDetailItems, 'No runtime events were captured for this clip.'),
+      );
+
+      const chromeLogItems =
+        chromeDebugger?.logs.map((entry) => ({
+          eyebrow: [entry.source, entry.level].filter(Boolean).join(' • ').toUpperCase(),
+          title: entry.text,
+          detail: [entry.url, entry.timestamp].filter(Boolean).join(' • '),
+          tone: entry.level === 'error' ? ('error' as const) : entry.level === 'warning' ? ('warn' as const) : ('default' as const),
+        })) ?? [];
+
+      const chromeLogCard = makeSectionCard(
+        'Chrome logs',
+        chromeLogItems.length ? 'Messages captured through the Chrome debugger snapshot.' : 'No Chrome debugger logs were attached.',
+      );
+      chromeLogCard.append(
+        makeStreamRows(
+          chromeLogItems,
+          friendlyDebuggerMessage
+            ? `Chrome logs are unavailable for this clip: ${friendlyDebuggerMessage}`
+            : 'No Chrome debugger logs were attached to this clip.',
+        ),
+      );
+
       const networkCard = makeSectionCard(
         'Request signals',
         requestHighlights.length ? 'Slow or failed requests worth checking first.' : 'No failing or slow requests were captured.',
       );
       networkCard.append(makeInsightList(requestHighlights, 'No failing or slow requests were captured for this clip.'));
+
+      const runtimeNetworkItems =
+        runtimeContext?.network.map((entry) => ({
+          eyebrow: `${entry.method} ${entry.status ?? 'ERR'} • ${entry.durationMs}ms`,
+          title: entry.url,
+          detail: [entry.transport.toUpperCase(), entry.classification, entry.error].filter(Boolean).join(' • '),
+          tone: entry.classification === 'failed' ? ('error' as const) : entry.classification === 'slow' ? ('warn' as const) : ('default' as const),
+        })) ?? [];
+
+      const runtimeNetworkCard = makeSectionCard(
+        'Runtime network',
+        runtimeNetworkItems.length ? 'Requests observed by the in-page monitor.' : 'No runtime network activity was captured.',
+      );
+      runtimeNetworkCard.append(
+        makeStreamRows(runtimeNetworkItems, 'No runtime network requests were captured for this clip.'),
+      );
+
+      const chromeNetworkItems =
+        chromeDebugger?.network.map((entry) => {
+          const reqHeaderCount = entry.requestHeaders?.length ?? 0;
+          const resHeaderCount = entry.responseHeaders?.length ?? 0;
+          return {
+            eyebrow: `${entry.method} ${typeof entry.status === 'number' ? entry.status : 'ERR'}${entry.resourceType ? ` • ${entry.resourceType}` : ''}`,
+            title: entry.url,
+            detail: [
+              entry.mimeType,
+              entry.failedReason,
+              entry.blockedReason,
+              entry.hasRequestHeaders ? `${reqHeaderCount} request headers` : '',
+              entry.hasResponseHeaders ? `${resHeaderCount} response headers` : '',
+              entry.timestamp,
+            ]
+              .filter(Boolean)
+              .join(' • '),
+            tone:
+              entry.failedReason || entry.blockedReason || entry.status === null || (typeof entry.status === 'number' && entry.status >= 400)
+                ? ('error' as const)
+                : ('default' as const),
+          };
+        }) ?? [];
+
+      const chromeNetworkCard = makeSectionCard(
+        'Chrome network snapshot',
+        chromeNetworkItems.length ? 'Debugger-level requests retained for this clip.' : 'No Chrome debugger requests were attached.',
+      );
+      chromeNetworkCard.append(
+        makeStreamRows(
+          chromeNetworkItems,
+          friendlyDebuggerMessage
+            ? `Chrome network details are unavailable for this clip: ${friendlyDebuggerMessage}`
+            : 'No Chrome debugger requests were attached to this clip.',
+        ),
+      );
 
       const pageContextCard = makeSectionCard('Page context', 'Helpful page details without opening inspect.');
       const selectedTextBody = document.createElement('div');
@@ -1996,8 +2157,200 @@ function mountClipOverlay(
       }
 
       technicalDetails.append(technicalSummary, technicalBody);
+      technicalDetails.open = true;
+
+      const formatTimelineOffset = (timestamp: string, baseline: number) => {
+        const current = Date.parse(timestamp);
+        if (Number.isNaN(current)) {
+          return '--:--';
+        }
+        const deltaSeconds = Math.max(0, Math.round((current - baseline) / 1000));
+        const minutes = Math.floor(deltaSeconds / 60)
+          .toString()
+          .padStart(2, '0');
+        const seconds = (deltaSeconds % 60).toString().padStart(2, '0');
+        return `${minutes}:${seconds}`;
+      };
+
+      const actionTimelineItems = [
+        ...(runtimeContext?.events.map((entry) => ({
+          timestamp: entry.timestamp,
+          eyebrow: entry.type === 'route_change' ? 'Navigation' : `${entry.level.toUpperCase()} signal`,
+          title:
+            entry.type === 'route_change'
+              ? entry.message
+              : `${entry.message}`,
+          detail: [entry.url, entry.source].filter(Boolean).join(' • '),
+          tone: entry.level === 'error' ? ('error' as const) : entry.level === 'warn' ? ('warn' as const) : ('default' as const),
+        })) ?? []),
+        ...(runtimeContext?.network
+          .filter((entry) => entry.classification !== 'ok')
+          .map((entry) => ({
+            timestamp: entry.finishedAt,
+            eyebrow: entry.classification === 'failed' ? 'Request failed' : 'Request slow',
+            title: `${entry.method} ${entry.status ?? 'ERR'} ${entry.url}`,
+            detail: `${entry.durationMs}ms${entry.error ? ` • ${entry.error}` : ''}`,
+            tone: entry.classification === 'failed' ? ('error' as const) : ('warn' as const),
+          })) ?? []),
+      ]
+        .filter((entry) => entry.timestamp)
+        .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+
+      const actionTimelineBase =
+        actionTimelineItems.length && !Number.isNaN(Date.parse(actionTimelineItems[0].timestamp))
+          ? Date.parse(actionTimelineItems[0].timestamp)
+          : Date.now();
+
+      const actionTimelineCard = makeSectionCard(
+        'Action timeline',
+        actionTimelineItems.length
+          ? 'A readable sequence of what the clip captured around the bug.'
+          : 'No meaningful actions were captured during this clip.',
+      );
+      actionTimelineCard.append(
+        makeStreamRows(
+          actionTimelineItems.map((entry) => ({
+            eyebrow: `${formatTimelineOffset(entry.timestamp, actionTimelineBase)} • ${entry.eyebrow}`,
+            title: entry.title,
+            detail: entry.detail,
+            tone: entry.tone,
+          })),
+          'No route changes, warnings, errors, or suspicious requests were captured for this clip.',
+        ),
+      );
+
+      const aiCard = makeSectionCard(
+        'AI handoff',
+        'This is the packet an agent will reason over alongside the clip image.',
+      );
+
+      const aiChecklist = document.createElement('div');
+      aiChecklist.style.display = 'grid';
+      aiChecklist.style.gap = '8px';
+      [
+        noteField.value.trim()
+          ? 'Prompt attached: the model has explicit guidance for what to inspect next.'
+          : 'No prompt attached yet: add one in the editor if you want the model to focus on a specific fix.',
+        importantFindings.length
+          ? `${importantFindings.length} notable signal${importantFindings.length === 1 ? '' : 's'} surfaced from console and network evidence.`
+          : 'No obvious runtime failure surfaced; the screenshot and annotations remain the primary evidence.',
+        chromeDebugger
+          ? friendlyDebuggerMessage
+            ? `Chrome-only details were limited for this clip: ${friendlyDebuggerMessage}`
+            : `Chrome debugger snapshot included ${chromeDebugger.logs.length} logs and ${chromeDebugger.network.length} requests.`
+          : 'No Chrome debugger snapshot is attached to this clip.',
+      ].forEach((line) => {
+        const item = document.createElement('div');
+        item.style.padding = '12px 14px';
+        item.style.borderRadius = '14px';
+        item.style.border = '1px solid rgba(157, 177, 207, 0.14)';
+        item.style.background = 'rgba(255, 255, 255, 0.035)';
+        item.style.color = '#d8e3f2';
+        item.style.fontSize = '13px';
+        item.style.lineHeight = '1.5';
+        item.textContent = line;
+        aiChecklist.append(item);
+      });
+      aiCard.append(aiChecklist);
+
+      const debugTabs = document.createElement('div');
+      debugTabs.style.display = 'flex';
+      debugTabs.style.alignItems = 'center';
+      debugTabs.style.gap = '8px';
+      debugTabs.style.flexWrap = 'wrap';
+      debugTabs.setAttribute('role', 'tablist');
+      debugTabs.setAttribute('aria-label', 'Debug inspector tabs');
+
+      const debugPanel = document.createElement('div');
+      debugPanel.style.display = 'grid';
+      debugPanel.style.alignContent = 'start';
+      debugPanel.style.gap = '14px';
+      debugPanel.style.minHeight = '0';
+
+      const debugTabButtons = new Map<DebugInspectorTab, HTMLButtonElement>();
+      const debugTabConfig: Array<{ key: DebugInspectorTab; label: string }> = [
+        { key: 'info', label: 'Info' },
+        { key: 'console', label: 'Console' },
+        { key: 'network', label: 'Network' },
+        { key: 'actions', label: 'Actions' },
+        { key: 'ai', label: 'AI' },
+      ];
+      let activeDebugTab: DebugInspectorTab = 'info';
+
+      const getDebugTabNodes = (tab: DebugInspectorTab) => {
+        switch (tab) {
+          case 'info':
+            return [debugTopGrid, overviewStrip, importantCard, pageContextCard, technicalDetails];
+          case 'console':
+            return [overviewStrip, consoleCard, consoleDetailCard, chromeLogCard];
+          case 'network':
+            return [overviewStrip, networkCard, runtimeNetworkCard, chromeNetworkCard];
+          case 'actions':
+            return [overviewStrip, actionTimelineCard];
+          case 'ai':
+            return [promptSummaryCard, aiCard, importantCard];
+        }
+      };
+
+      const renderDebugTab = () => {
+        debugTabButtons.forEach((button, key) => {
+          const active = key === activeDebugTab;
+          button.setAttribute('aria-selected', active ? 'true' : 'false');
+          button.tabIndex = active ? 0 : -1;
+          button.style.background = active ? 'rgba(103, 209, 255, 0.16)' : 'rgba(255,255,255,0.04)';
+          button.style.borderColor = active ? 'rgba(103, 209, 255, 0.45)' : 'rgba(157, 177, 207, 0.14)';
+          button.style.color = active ? '#eef7ff' : '#9db2cf';
+          button.style.boxShadow = active ? 'inset 0 -2px 0 rgba(103, 209, 255, 0.72)' : 'none';
+        });
+
+        debugPanel.replaceChildren(...getDebugTabNodes(activeDebugTab));
+      };
+
+      const activateDebugTab = (tab: DebugInspectorTab) => {
+        activeDebugTab = tab;
+        renderDebugTab();
+      };
+
+      debugTabConfig.forEach(({ key, label }, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-controls', 'snapclip-debug-panel');
+        button.style.border = '1px solid rgba(157, 177, 207, 0.14)';
+        button.style.borderRadius = '999px';
+        button.style.padding = '10px 14px';
+        button.style.minHeight = '40px';
+        button.style.background = 'rgba(255,255,255,0.04)';
+        button.style.color = '#9db2cf';
+        button.style.font = 'inherit';
+        button.style.fontSize = '13px';
+        button.style.fontWeight = '700';
+        button.style.cursor = 'pointer';
+        button.addEventListener('click', () => activateDebugTab(key));
+        button.addEventListener('keydown', (event) => {
+          if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
+            return;
+          }
+          event.preventDefault();
+          const nextIndex =
+            event.key === 'ArrowRight'
+              ? (index + 1) % debugTabConfig.length
+              : (index - 1 + debugTabConfig.length) % debugTabConfig.length;
+          const nextTab = debugTabConfig[nextIndex];
+          activateDebugTab(nextTab.key);
+          debugTabButtons.get(nextTab.key)?.focus();
+        });
+        debugTabButtons.set(key, button);
+        debugTabs.append(button);
+      });
+
+      debugPanel.id = 'snapclip-debug-panel';
+      debugPanel.setAttribute('role', 'tabpanel');
+      debugPanel.setAttribute('aria-label', 'Debug inspector content');
       debugWorkspace.style.gridColumn = '1 / -1';
-      debugWorkspace.append(detailsHead, debugTopGrid, overviewStrip, importantCard, consoleCard, networkCard, pageContextCard, technicalDetails);
+      debugWorkspace.append(detailsHead, debugTabs, debugPanel);
+      renderDebugTab();
 
       const scrollbarStyle = document.createElement('style');
       scrollbarStyle.textContent = `
@@ -2019,6 +2372,9 @@ function mountClipOverlay(
         const promptText = noteField.value.trim();
         promptSummaryBody.textContent = promptText || 'No prompt yet. Add one when you go back to the editor.';
         promptSummaryBody.style.color = promptText ? '#eef4fb' : '#9db2cf';
+        if (activeDebugTab === 'ai') {
+          renderDebugTab();
+        }
       };
 
       noteField.addEventListener('input', syncDebugWorkspace);
@@ -2670,7 +3026,7 @@ function mountClipOverlay(
 
       const syncRailMode = () => {
         const showDetails = railMode === 'details';
-        contentGrid.style.gridTemplateColumns = showDetails ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(380px, 420px)';
+        contentGrid.style.gridTemplateColumns = showDetails ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(420px, 480px)';
         mainColumn.style.display = showDetails ? 'none' : 'grid';
         sideRail.style.display = showDetails ? 'none' : 'grid';
         composePanel.style.display = showDetails ? 'none' : 'grid';
