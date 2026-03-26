@@ -12,7 +12,7 @@ body {
   margin: 0;
   min-width: 360px;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 button,
@@ -67,8 +67,8 @@ button:focus-visible {
 
 .popup-shell {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px;
   overflow: visible;
   position: relative;
 }
@@ -94,7 +94,7 @@ button:focus-visible {
 
 .popup-header {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .brand-row {
@@ -127,14 +127,15 @@ button:focus-visible {
 
 .hero-copy {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .popup-header h1 {
   margin: 0;
-  font-size: clamp(26px, 4vw, 30px);
-  line-height: 1.02;
+  font-size: 22px;
+  line-height: 0.98;
   letter-spacing: -0.04em;
+  max-width: 10ch;
 }
 
 .eyebrow {
@@ -162,7 +163,7 @@ button:focus-visible {
 }
 
 .lede {
-  font-size: 14px;
+  font-size: 12px;
   max-width: 28ch;
 }
 
@@ -179,16 +180,16 @@ button:focus-visible {
 .utility-row,
 .footer-stack {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-card {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   text-align: left;
-  padding: 14px 15px;
-  border-radius: 18px;
+  padding: 12px 13px;
+  border-radius: 16px;
   border: 1px solid rgba(156, 178, 209, 0.14);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
@@ -217,18 +218,18 @@ button:focus-visible {
 }
 
 .action-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .action-copy {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .shortcut-panel {
-  padding: 14px;
-  border-radius: 18px;
+  padding: 12px;
+  border-radius: 16px;
   border: 1px solid rgba(156, 178, 209, 0.14);
   background: rgba(10, 15, 27, 0.74);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
@@ -242,12 +243,14 @@ button:focus-visible {
 }
 
 .panel-hint {
-  font-size: 12px;
+  font-size: 11px;
   text-align: right;
+  max-width: 20ch;
 }
 
 .shortcut-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -255,12 +258,12 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 11px 12px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #dbe6f7;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -272,13 +275,13 @@ button:focus-visible {
 }
 
 .shortcut-chip kbd {
-  padding: 6px 8px;
-  border-radius: 10px;
+  padding: 5px 7px;
+  border-radius: 9px;
   background: rgba(8, 15, 28, 0.92);
   border: 1px solid rgba(127, 182, 255, 0.16);
   color: #9fd6ff;
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -303,15 +306,15 @@ button:focus-visible {
 }
 
 .status {
-  font-size: 13px;
-  padding: 10px 12px;
+  font-size: 12px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(156, 178, 209, 0.12);
 }
 
 .mode-description {
-  font-size: 12px;
+  font-size: 11px;
   color: #9fb0cb;
 }
 
