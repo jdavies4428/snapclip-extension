@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 
-type ShortcutCommandName = 'start-region-clip' | 'start-visible-clip' | 'open-last-clip-editor';
+type ShortcutCommandName =
+  | 'start-region-clip'
+  | 'start-visible-clip'
+  | 'open-last-clip-editor'
+  | 'open-side-panel';
 
 const FALLBACK_SHORTCUT_LABELS: Record<ShortcutCommandName, string> = {
   'start-region-clip': 'Option/Alt + Shift + S',
   'start-visible-clip': 'Option/Alt + Shift + D',
   'open-last-clip-editor': 'Option/Alt + Shift + E',
+  'open-side-panel': 'Option/Alt + Shift + L',
 };
 
 export default function App() {
@@ -189,6 +194,14 @@ export default function App() {
           >
             <span>Edit latest</span>
             <kbd>{shortcutLabels['open-last-clip-editor']}</kbd>
+          </div>
+          <div
+            className={`shortcut-chip ${
+              shortcutLabels['open-side-panel'] === 'Set in Chrome shortcuts' ? 'shortcut-chip-warning' : ''
+            }`}
+          >
+            <span>Open panel</span>
+            <kbd>{shortcutLabels['open-side-panel']}</kbd>
           </div>
         </div>
       </section>

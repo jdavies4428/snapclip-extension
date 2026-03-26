@@ -34,6 +34,13 @@ export default defineManifest({
       },
       description: 'Toggle the editor for the most recent clip.',
     },
+    'open-side-panel': {
+      suggested_key: {
+        default: 'Alt+Shift+L',
+        mac: 'Option+Shift+L',
+      },
+      description: 'Open the LLM Clip side panel.',
+    },
   },
   background: {
     service_worker: 'src/service-worker/index.ts',

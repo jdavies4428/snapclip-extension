@@ -109,6 +109,31 @@ function captureHeaders(headers: unknown) {
   };
 }
 
+function buildHeaderPatch(
+  capture: ReturnType<typeof captureHeaders>,
+  kind: 'request' | 'response',
+): Partial<NetworkSnapshot> {
+  if (!capture.hasHeaders) {
+    return {};
+  }
+
+  if (kind === 'request') {
+    return {
+      requestHeaders: capture.headers,
+      requestHeadersText: capture.headersText,
+      hasRequestHeaders: true,
+      isTruncated: capture.isTruncated,
+    };
+  }
+
+  return {
+    responseHeaders: capture.headers,
+    responseHeadersText: capture.headersText,
+    hasResponseHeaders: true,
+    isTruncated: capture.isTruncated,
+  };
+}
+
 function readMetricValue(
   metrics: Array<{ name?: string; value?: number }> | undefined,
   name: DebuggerMetricName,
@@ -343,12 +368,9 @@ export async function captureChromeDebuggerContext(
         url: String(entry.request?.url || fallback.url),
         resourceType: entry.type ? String(entry.type) : null,
         priority: entry.request?.initialPriority ? String(entry.request.initialPriority) : null,
-        requestHeaders: requestHeaders.headers,
-        requestHeadersText: requestHeaders.headersText,
-        hasRequestHeaders: requestHeaders.hasHeaders,
         hasRequestBody: Boolean(entry.request?.hasPostData),
-        isTruncated: requestHeaders.isTruncated,
         timestamp: new Date().toISOString(),
+        ...buildHeaderPatch(requestHeaders, 'request'),
       });
       return;
     }
@@ -366,11 +388,8 @@ export async function captureChromeDebuggerContext(
       }
       const requestHeaders = captureHeaders(entry.headers);
       upsertNetwork(entry.requestId, {
-        requestHeaders: requestHeaders.headers,
-        requestHeadersText: requestHeaders.headersText,
-        hasRequestHeaders: requestHeaders.hasHeaders,
-        isTruncated: Boolean(requestHeaders.isTruncated),
         timestamp: new Date().toISOString(),
+        ...buildHeaderPatch(requestHeaders, 'request'),
       });
       return;
     }
@@ -399,12 +418,9 @@ export async function captureChromeDebuggerContext(
         status: typeof entry.response?.status === 'number' ? entry.response.status : null,
         statusText: entry.response?.statusText ? String(entry.response.statusText) : null,
         mimeType: entry.response?.mimeType ? String(entry.response.mimeType) : null,
-        responseHeaders: responseHeaders.headers,
-        responseHeadersText: responseHeaders.headersText,
-        hasResponseHeaders: responseHeaders.hasHeaders,
-        isTruncated: Boolean(responseHeaders.isTruncated),
         fromDiskCache: Boolean(entry.response?.fromDiskCache),
         fromServiceWorker: Boolean(entry.response?.fromServiceWorker),
+        ...buildHeaderPatch(responseHeaders, 'response'),
       });
       return;
     }
@@ -423,12 +439,9 @@ export async function captureChromeDebuggerContext(
       }
       const responseHeaders = captureHeaders(entry.headers);
       upsertNetwork(entry.requestId, {
-        responseHeaders: responseHeaders.headers,
-        responseHeadersText: responseHeaders.headersText,
-        hasResponseHeaders: responseHeaders.hasHeaders,
         status: typeof entry.statusCode === 'number' ? entry.statusCode : undefined,
-        isTruncated: Boolean(responseHeaders.isTruncated),
         timestamp: new Date().toISOString(),
+        ...buildHeaderPatch(responseHeaders, 'response'),
       });
       return;
     }

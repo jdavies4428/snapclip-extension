@@ -77,6 +77,11 @@ chrome.commands.onCommand.addListener(async (command) => {
   try {
     await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
 
+    if (command === 'open-side-panel') {
+      await openSidePanelForLastFocusedWindow();
+      return;
+    }
+
     if (command === 'open-last-clip-editor') {
       await openLastCapturedClipEditor();
       return;

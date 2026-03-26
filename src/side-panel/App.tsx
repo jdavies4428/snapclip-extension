@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   type BridgeTask,
   type HandoffIntent,
@@ -161,22 +161,56 @@ function DebuggerNetworkInspector({
       sum + countRedactedHeaders(request.requestHeaders) + countRedactedHeaders(request.responseHeaders),
     0,
   );
+  const tabOrder: DebuggerInspectorTab[] = ['headers', 'request', 'response'];
+  const panelId = selectedRequest ? `debugger-panel-${selectedRequest.id}-${activeTab}` : 'debugger-panel-empty';
+
+  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, tab: DebuggerInspectorTab) => {
+    const currentIndex = tabOrder.indexOf(tab);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+    } else {
+      return;
+    }
+
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? tabOrder.length - 1
+          : event.key === 'ArrowRight'
+            ? (currentIndex + 1) % tabOrder.length
+            : (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+
+    onTabChange(tabOrder[nextIndex]);
+  };
 
   return (
     <div className="network-inspector">
       <div className="network-inspector-head">
         <div className="network-inspector-copy">
-          <p className="panel-disclosure-label">Deep network inspector</p>
+          <p className="eyebrow">Deep Network Inspector</p>
+          <h3 className="network-inspector-title">Bounded request evidence for this clip</h3>
           <p className="network-inspector-note">
             Bounded local snapshot. Captured during this clip only. Sensitive values may be redacted before storage and export.
           </p>
         </div>
-        <div className="network-inspector-summary">
-          <span className="context-card-badge">{sortedRequests.length} requests</span>
-          <span className="context-card-badge">
-            {snapshot.observationWindowMs ?? 0}ms window
-          </span>
-          {redactedHeaderCount ? <span className="context-card-badge">{redactedHeaderCount} redacted values</span> : null}
+        <div className="network-inspector-summary-grid">
+          <div className="network-inspector-metric">
+            <span className="network-inspector-metric-value">{sortedRequests.length}</span>
+            <span className="network-inspector-metric-label">requests retained</span>
+          </div>
+          <div className="network-inspector-metric">
+            <span className="network-inspector-metric-value">{snapshot.observationWindowMs ?? 0}ms</span>
+            <span className="network-inspector-metric-label">capture window</span>
+          </div>
+          <div className="network-inspector-metric">
+            <span className="network-inspector-metric-value">{redactedHeaderCount}</span>
+            <span className="network-inspector-metric-label">redacted values</span>
+          </div>
         </div>
       </div>
 
@@ -211,6 +245,12 @@ function DebuggerNetworkInspector({
                 </div>
                 <strong>{formatRequestLabel(request.url)}</strong>
                 <p>{request.url}</p>
+                <div className="request-row-meta">
+                  <span>{getHostLabel(request.url)}</span>
+                  {request.timestamp ? (
+                    <span>{new Date(request.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                  ) : null}
+                </div>
                 <code>
                   {[
                     request.mimeType,
@@ -229,9 +269,15 @@ function DebuggerNetworkInspector({
           {selectedRequest ? (
             <section className="request-detail" aria-label="Selected request details">
               <div className="request-detail-head">
-                <div>
+                <div className="request-detail-title-block">
                   <p className="panel-disclosure-label">Selected request</p>
                   <h3>{formatRequestLabel(selectedRequest.url)}</h3>
+                  <p className="request-detail-subtitle">
+                    {getHostLabel(selectedRequest.url)} • {selectedRequest.method} •{' '}
+                    {selectedRequest.timestamp
+                      ? new Date(selectedRequest.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                      : 'snapshot'}
+                  </p>
                 </div>
                 <span className={`context-card-badge context-card-badge-${getDebuggerRequestTone(selectedRequest)}`}>
                   {formatRequestStatus(selectedRequest)}
@@ -239,13 +285,17 @@ function DebuggerNetworkInspector({
               </div>
 
               <div className="inspector-tabs" role="tablist" aria-label="Request detail tabs">
-                {(['headers', 'request', 'response'] as DebuggerInspectorTab[]).map((tab) => (
+                {tabOrder.map((tab) => (
                   <button
+                    aria-controls={panelId}
                     aria-selected={activeTab === tab}
                     className={`inspector-tab ${activeTab === tab ? 'inspector-tab-active' : ''}`}
+                    id={`debugger-tab-${selectedRequest.id}-${tab}`}
                     key={tab}
+                    onKeyDown={(event) => handleTabKeyDown(event, tab)}
                     onClick={() => onTabChange(tab)}
                     role="tab"
+                    tabIndex={activeTab === tab ? 0 : -1}
                     type="button"
                   >
                     {tab}
@@ -272,8 +322,20 @@ function DebuggerNetworkInspector({
                 </div>
               </dl>
 
+              <div className="request-detail-banner">
+                <span className="context-card-badge">Local only</span>
+                <span className="context-card-badge">{selectedRequest.hasRequestHeaders ? 'Request headers retained' : 'No request headers'}</span>
+                <span className="context-card-badge">{selectedRequest.hasResponseHeaders ? 'Response headers retained' : 'No response headers'}</span>
+              </div>
+
               {activeTab === 'headers' ? (
-                <div className="network-inspector-section-stack">
+                <div
+                  aria-labelledby={`debugger-tab-${selectedRequest.id}-headers`}
+                  className="network-inspector-section-stack"
+                  id={panelId}
+                  role="tabpanel"
+                  tabIndex={0}
+                >
                   <div className="network-inspector-section">
                     <p className="panel-disclosure-label">Request headers</p>
                     <HeaderTable headers={selectedRequest.requestHeaders} emptyLabel="No request headers were retained." />
@@ -286,7 +348,13 @@ function DebuggerNetworkInspector({
               ) : null}
 
               {activeTab === 'request' ? (
-                <div className="network-inspector-section-stack">
+                <div
+                  aria-labelledby={`debugger-tab-${selectedRequest.id}-request`}
+                  className="network-inspector-section-stack"
+                  id={panelId}
+                  role="tabpanel"
+                  tabIndex={0}
+                >
                   <div className="network-inspector-section">
                     <p className="panel-disclosure-label">Request metadata</p>
                     <dl className="meta-grid meta-grid-compact">
@@ -312,7 +380,13 @@ function DebuggerNetworkInspector({
               ) : null}
 
               {activeTab === 'response' ? (
-                <div className="network-inspector-section-stack">
+                <div
+                  aria-labelledby={`debugger-tab-${selectedRequest.id}-response`}
+                  className="network-inspector-section-stack"
+                  id={panelId}
+                  role="tabpanel"
+                  tabIndex={0}
+                >
                   <div className="network-inspector-section">
                     <p className="panel-disclosure-label">Response metadata</p>
                     <dl className="meta-grid meta-grid-compact">
