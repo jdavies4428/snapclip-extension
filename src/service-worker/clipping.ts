@@ -3033,6 +3033,8 @@ function mountClipOverlay(
       let bridgeStatusMessage = '';
       let bridgeStatusTone: 'default' | 'success' | 'error' = 'default';
       let bridgeDiscoveryMode: 'workspace' | 'active' = 'workspace';
+      let bridgeHealthState: 'unknown' | 'unavailable' | 'ready' | 'claude_unavailable' | 'hooks_missing' = 'unknown';
+      let bridgeHealthSummary = '';
       let isBridgeLoading = false;
       let isBridgeSending = false;
       let activeClaudeSessionId = '';
@@ -3147,7 +3149,7 @@ function mountClipOverlay(
           const copy = document.createElement('div');
           copy.textContent =
             mode === 'rail'
-              ? 'Send this clip directly into a live Claude session on your local bridge.'
+              ? 'Send this clip directly into a live Claude session when the local companion is ready.'
               : 'Send this clip directly from the debug report.';
           copy.style.color = '#b7c4da';
           copy.style.fontSize = mode === 'rail' ? '12px' : '11px';
@@ -3258,12 +3260,12 @@ function mountClipOverlay(
             empty.textContent = isBridgeLoading
               ? 'Loading live Claude sessions...'
               : bridgeDiscoveryMode === 'active'
-                ? 'No live Claude sessions were found on the local bridge.'
+                ? 'No live Claude sessions are open right now.'
                 : selectedWorkspaceId
-                ? 'No live Claude sessions in this workspace yet.'
+                ? 'No live Claude sessions were found in the fallback workspace view.'
                 : bridgeWorkspaces.length
-                  ? 'Pick a workspace to load live Claude sessions.'
-                  : 'No bridge workspaces are available yet.';
+                  ? 'No live sessions were found yet.'
+                  : 'No live Claude sessions were found.';
             empty.style.color = '#9db2cf';
             empty.style.fontSize = '12px';
             empty.style.lineHeight = '1.45';
@@ -3279,7 +3281,15 @@ function mountClipOverlay(
           status.style.lineHeight = '1.45';
           status.textContent =
             bridgeStatusMessage ||
-            (bridgeDiscoveryMode === 'active'
+            (bridgeHealthState === 'unavailable'
+              ? 'Install or start the local companion to send clips directly into Claude.'
+              : bridgeHealthState === 'claude_unavailable'
+                ? 'The local companion is running, but Claude Code is not available here yet.'
+                : bridgeHealthState === 'hooks_missing'
+                  ? 'The local companion is running. Install Claude hooks to discover live sessions automatically.'
+                  : bridgeHealthSummary
+                    ? bridgeHealthSummary
+              : bridgeDiscoveryMode === 'active'
               ? 'Live sessions were discovered directly from the local bridge.'
               : bridgeWorkspaces.length
               ? 'Live sessions are discovered through the local bridge and stay local unless you send them.'
@@ -3310,6 +3320,25 @@ function mountClipOverlay(
 
         try {
           const storedSelection = await readStoredBridgeSelection();
+          const healthResponse = await chrome.runtime.sendMessage({
+            type: 'get-bridge-health',
+          });
+
+          if (!healthResponse?.ok || !healthResponse.health) {
+            throw new Error(healthResponse?.error || 'The local companion is unavailable.');
+          }
+
+          const bridgeHealth = healthResponse.health;
+          bridgeHealthSummary = bridgeHealth.claude.cliAvailable
+            ? bridgeHealth.claude.hookInstalled
+              ? 'Local companion connected.'
+              : 'Local companion connected. Claude hooks are not installed yet.'
+            : 'Local companion connected. Claude Code is not available yet.';
+          bridgeHealthState = !bridgeHealth.claude.cliAvailable
+            ? 'claude_unavailable'
+            : !bridgeHealth.claude.hookInstalled
+              ? 'hooks_missing'
+              : 'ready';
 
           if (reloadWorkspaces || bridgeSessions.length === 0) {
             const activeSessionResponse = await chrome.runtime.sendMessage({
@@ -3438,10 +3467,12 @@ function mountClipOverlay(
           );
           await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
         } catch (error) {
+          bridgeHealthState = 'unavailable';
+          bridgeHealthSummary = '';
           bridgeWorkspaces = reloadWorkspaces ? [] : bridgeWorkspaces;
           bridgeSessions = [];
           bridgeStatusMessage =
-            error instanceof Error ? error.message : 'LLM Clip could not reach the local Claude bridge.';
+            error instanceof Error ? error.message : 'The local companion is unavailable.';
           bridgeStatusTone = 'error';
         } finally {
           if (requestToken === bridgeRequestToken) {

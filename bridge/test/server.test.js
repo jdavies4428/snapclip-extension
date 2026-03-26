@@ -90,6 +90,11 @@ test('health is public and workspace discovery exposes the configured workspace'
   const healthPayload = await healthResponse.json();
   assert.equal(healthResponse.status, 200);
   assert.equal(healthPayload.ok, true);
+  assert.equal(healthPayload.service, 'snapclip-bridge');
+  assert.equal(healthPayload.companion.host, '127.0.0.1');
+  assert.equal(healthPayload.companion.workspaceCount, 1);
+  assert.equal(typeof healthPayload.claude.cliAvailable, 'boolean');
+  assert.equal(Array.isArray(healthPayload.claude.installedEvents), true);
 
   const workspaces = await bridgeFetch(baseUrl, '/workspaces');
   assert.equal(workspaces.response.status, 200);
@@ -122,6 +127,30 @@ test('hook config and install endpoints expose authenticated Claude hook setting
     parsedSettings.hooks.PermissionRequest[0].hooks[0].url,
     `${baseUrl}/hooks/permission-request`,
   );
+});
+
+test('active sessions are listed across workspaces without requiring workspace selection', async (t) => {
+  const { bridge, baseUrl } = await startTestBridge();
+  t.after(async () => {
+    await bridge.close();
+  });
+
+  await bridgeFetch(baseUrl, '/hooks/session-start', {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: 'session-live-1',
+      cwd: bridge.config.cwd,
+      hook_event_name: 'SessionStart',
+      source: 'test',
+    }),
+  });
+
+  const active = await bridgeFetch(baseUrl, '/sessions/active');
+  assert.equal(active.response.status, 200);
+  assert.equal(active.payload.sessions.length, 1);
+  assert.equal(active.payload.sessions[0].id, 'session-live-1');
+  assert.equal(active.payload.sessions[0].workspaceId, bridge.registry.listWorkspaces()[0].id);
+  assert.equal(typeof active.payload.sessions[0].workspaceName, 'string');
 });
 
 test('creating an export task writes a deterministic bundle and completes immediately', async (t) => {

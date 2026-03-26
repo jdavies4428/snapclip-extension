@@ -60,7 +60,7 @@ npm run dev
 
 `npm run dev` uses Vite in watch mode and writes updated extension assets into `dist/`.
 
-## Local bridge
+## Local companion / bridge
 
 Start the localhost bridge from the repo root:
 
@@ -81,6 +81,25 @@ Optional overrides:
 ```bash
 npm run bridge:install-hooks -- --settings /absolute/path/to/settings.local.json --base-url http://127.0.0.1:4311 --token snapclip-dev
 ```
+
+### macOS companion management
+
+The repo now includes macOS-only helper scripts to run the bridge as a background LaunchAgent:
+
+```bash
+npm run bridge:companion:install
+npm run bridge:companion:start
+npm run bridge:companion:stop
+npm run bridge:companion:uninstall
+```
+
+What this does:
+- installs a LaunchAgent at `~/Library/LaunchAgents/dev.llmclip.bridge.plist`
+- writes a run script under `~/Library/Application Support/LLM Clip Companion/`
+- keeps the existing localhost API at `http://127.0.0.1:4311`
+
+This is a local developer-grade companion flow, not yet a polished end-user installer.
+It uses the current repo path and current Node binary, so if either moves the LaunchAgent should be reinstalled.
 
 ## Load unpacked in Chrome
 
@@ -110,7 +129,9 @@ Unsupported pages:
 
 The localhost bridge now owns:
 
-- workspace discovery
+- companion health
+- session-first Claude discovery
+- workspace discovery fallback
 - live Claude session discovery from Claude Code hooks
 - pending approval tracking for Claude permission hooks
 - deterministic bundle writing into the selected workspace

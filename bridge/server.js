@@ -2,10 +2,11 @@ import http from 'node:http';
 import { resolve } from 'node:path';
 
 import { writeTaskBundle } from './bundles.js';
-import { runClaudeResume, buildClaudeResumePrompt } from './claude.js';
+import { runClaudeResume, buildClaudeResumePrompt, probeClaudeCli } from './claude.js';
 import { resolveBridgeConfig } from './config.js';
 import {
   buildClaudeHookConfig,
+  inspectClaudeHookConfig,
   getDefaultClaudeSettingsPath,
   installClaudeHookConfig,
 } from './hooks.js';
@@ -24,6 +25,7 @@ export function createBridgeServer(options = {}) {
   const config = resolveBridgeConfig(options);
   const registry = options.registry ?? new BridgeRegistry(config);
   const claudeRunner = options.claudeRunner ?? runClaudeResume;
+  const claudeProbe = options.claudeProbe ?? probeClaudeCli;
   const clock = options.clock ?? (() => new Date());
   const taskJobs = new Set();
 
@@ -33,10 +35,34 @@ export function createBridgeServer(options = {}) {
 
     try {
       if (request.method === 'GET' && pathname === '/health') {
+        const bridgeBaseUrl = buildBridgeBaseUrl(request, config);
+        const [claudeStatus, hookStatus] = await Promise.all([
+          claudeProbe(),
+          inspectClaudeHookConfig({
+            cwd: config.cwd,
+            baseUrl: bridgeBaseUrl,
+            token: config.token,
+          }),
+        ]);
+        const workspaces = registry.listWorkspaces();
         sendJson(response, 200, {
           ok: true,
           service: 'snapclip-bridge',
           now: clock().toISOString(),
+          companion: {
+            version: options.version ?? process.env.npm_package_version ?? '0.1.0',
+            host: config.host,
+            port: config.port,
+            workspaceCount: workspaces.length,
+            liveSessionCount: workspaces.reduce((count, workspace) => count + workspace.sessionCount, 0),
+          },
+          claude: {
+            cliAvailable: Boolean(claudeStatus.cliAvailable),
+            cliVersion: claudeStatus.cliVersion ?? null,
+            defaultSettingsPath: hookStatus.settingsPath || getDefaultClaudeSettingsPath(config.cwd),
+            hookInstalled: hookStatus.hookInstalled,
+            installedEvents: hookStatus.installedEvents,
+          },
         });
         return;
       }
@@ -61,6 +87,13 @@ export function createBridgeServer(options = {}) {
         const liveOnly = (url.searchParams.get('view') ?? '').toLowerCase() === 'live';
         sendJson(response, 200, {
           sessions: registry.listSessions(workspaceId, { liveOnly }),
+        });
+        return;
+      }
+
+      if (request.method === 'GET' && pathname === '/sessions/active') {
+        sendJson(response, 200, {
+          sessions: registry.listActiveSessions(),
         });
         return;
       }

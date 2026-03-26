@@ -56,3 +56,56 @@ export async function runClaudeResume({ sessionId, prompt, cwd }) {
     });
   });
 }
+
+export async function probeClaudeCli(options = {}) {
+  const timeoutMs = options.timeoutMs ?? 1200;
+  return new Promise((resolve) => {
+    const child = spawn('claude', ['--version'], {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    const timeoutId = setTimeout(() => {
+      child.kill('SIGTERM');
+      resolve({
+        cliAvailable: false,
+        cliVersion: null,
+      });
+    }, timeoutMs);
+
+    child.on('error', () => {
+      clearTimeout(timeoutId);
+      resolve({
+        cliAvailable: false,
+        cliVersion: null,
+      });
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timeoutId);
+      if (code === 0) {
+        resolve({
+          cliAvailable: true,
+          cliVersion: stdout.trim() || stderr.trim() || 'unknown',
+        });
+        return;
+      }
+
+      resolve({
+        cliAvailable: false,
+        cliVersion: null,
+      });
+    });
+  });
+}

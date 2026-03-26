@@ -10,7 +10,11 @@
     "bridge:dev": "node --watch bridge/index.js",
     "bridge:start": "node bridge/index.js",
     "bridge:install-hooks": "node bridge/install-hooks.js",
-    "bridge:test": "node --test bridge/test/hooks.test.js bridge/test/server.test.js"
+    "bridge:companion:install": "node bridge/install-companion.js",
+    "bridge:companion:start": "node bridge/start-companion.js",
+    "bridge:companion:stop": "node bridge/stop-companion.js",
+    "bridge:companion:uninstall": "node bridge/uninstall-companion.js",
+    "bridge:test": "node --test bridge/test/hooks.test.js bridge/test/server.test.js bridge/test/companion.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",

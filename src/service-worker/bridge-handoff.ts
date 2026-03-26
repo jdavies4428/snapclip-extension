@@ -1,9 +1,11 @@
 import {
   createBridgeTask,
+  getBridgeHealth,
   listBridgeActiveSessions,
   listBridgeSessions,
   listBridgeWorkspaces,
   waitForBridgeTask,
+  type BridgeHealth,
   type BridgeSession,
   type BridgeTask,
   type BridgeWorkspace,
@@ -148,6 +150,10 @@ function buildHandoffRecord(params: {
 
 export async function loadBridgeWorkspaces(): Promise<BridgeWorkspace[]> {
   return listBridgeWorkspaces();
+}
+
+export async function loadBridgeHealth(): Promise<BridgeHealth> {
+  return getBridgeHealth();
 }
 
 export async function loadBridgeSessions(workspaceId: string): Promise<BridgeSession[]> {

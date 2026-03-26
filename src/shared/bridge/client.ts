@@ -11,6 +11,26 @@ export type BridgeWorkspace = {
   source: string;
 };
 
+export type BridgeHealth = {
+  ok: true;
+  service: 'snapclip-bridge';
+  now: string;
+  companion: {
+    version: string;
+    host: string;
+    port: number;
+    workspaceCount: number;
+    liveSessionCount: number;
+  };
+  claude: {
+    cliAvailable: boolean;
+    cliVersion: string | null;
+    defaultSettingsPath: string;
+    hookInstalled: boolean;
+    installedEvents: string[];
+  };
+};
+
 export type BridgeSession = {
   id: string;
   workspaceId: string;
@@ -222,6 +242,10 @@ export async function listBridgeSessions(workspaceId: string): Promise<BridgeSes
 export async function listBridgeActiveSessions(): Promise<BridgeSession[]> {
   const response = await fetchBridge<{ sessions?: BridgeSession[] }>('/sessions/active');
   return Array.isArray(response.sessions) ? response.sessions : [];
+}
+
+export async function getBridgeHealth(): Promise<BridgeHealth> {
+  return fetchBridge<BridgeHealth>('/health');
 }
 
 export async function listBridgeApprovals(options: {

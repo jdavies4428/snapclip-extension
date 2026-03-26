@@ -1,4 +1,4 @@
-import type { HandoffIntent, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
+import type { HandoffIntent, BridgeHealth, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
 import type { EvidenceProfile } from '../export/evidence';
 import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
 import type { HandoffScope } from '../ai/prompts';
@@ -40,6 +40,10 @@ export type GetClipSessionMessage = {
 
 export type GetBridgeWorkspacesMessage = {
   type: 'get-bridge-workspaces';
+};
+
+export type GetBridgeHealthMessage = {
+  type: 'get-bridge-health';
 };
 
 export type GetBridgeSessionsMessage = {
@@ -132,6 +136,7 @@ export type SnapClipMessage =
   | OpenClipEditorMessage
   | CommitClipMessage
   | GetClipSessionMessage
+  | GetBridgeHealthMessage
   | GetBridgeWorkspacesMessage
   | GetBridgeSessionsMessage
   | GetBridgeActiveSessionsMessage
@@ -147,5 +152,5 @@ export type SnapClipMessage =
   | CancelClipOverlayMessage;
 
 export type SnapClipMessageResponse =
-  | { ok: true; session?: ClipSession; workspaces?: BridgeWorkspace[]; sessions?: BridgeSession[]; task?: BridgeTask }
+  | { ok: true; session?: ClipSession; health?: BridgeHealth; workspaces?: BridgeWorkspace[]; sessions?: BridgeSession[]; task?: BridgeTask }
   | { ok: false; error: string };

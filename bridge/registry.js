@@ -186,6 +186,33 @@ export class BridgeRegistry {
       }));
   }
 
+  listActiveSessions() {
+    const workspaceIndex = new Map(
+      Array.from(this.workspaces.values()).map((workspace) => [workspace.id, workspace]),
+    );
+
+    return Array.from(this.sessions.values())
+      .filter((session) => session.status === 'live')
+      .sort((left, right) => (right.lastSeenAt ?? '').localeCompare(left.lastSeenAt ?? ''))
+      .map((session) => {
+        const workspace = workspaceIndex.get(session.workspaceId);
+        return {
+          id: session.id,
+          workspaceId: session.workspaceId,
+          workspaceName: workspace?.name ?? session.workspaceId,
+          label: session.label,
+          surface: session.surface,
+          cwd: session.cwd,
+          lastSeenAt: session.lastSeenAt,
+          status: session.status,
+          activityState: session.activityState,
+          windowKey: session.windowKey,
+          isWindowPrimary: session.isWindowPrimary,
+          pendingApprovalCount: session.pendingApprovalIds.length,
+        };
+      });
+  }
+
   listApprovals(options = {}) {
     const {
       workspaceId = '',

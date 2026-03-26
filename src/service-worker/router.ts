@@ -1,7 +1,7 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { cancelClipOverlay, openSavedClipEditor, startClipWorkflow } from './clipping';
-import { loadBridgeActiveSessions, loadBridgeSessions, loadBridgeWorkspaces, sendClipToClaudeSession } from './bridge-handoff';
+import { loadBridgeActiveSessions, loadBridgeHealth, loadBridgeSessions, loadBridgeWorkspaces, sendClipToClaudeSession } from './bridge-handoff';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
 import { getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
@@ -98,6 +98,14 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
         return { ok: true, workspaces };
       } catch (error) {
         return { ok: false, error: normalizeBridgeMessageError(error, 'The local bridge workspaces could not be loaded.') };
+      }
+    }
+    case 'get-bridge-health': {
+      try {
+        const health = await loadBridgeHealth();
+        return { ok: true, health };
+      } catch (error) {
+        return { ok: false, error: normalizeBridgeMessageError(error, 'The local companion is unavailable.') };
       }
     }
     case 'get-bridge-sessions': {

@@ -258,6 +258,353 @@ session index
   -> select clip
   -> view summary
   -> optional reopen in modal
+
+## Local Companion Plan
+
+### CEO Review
+
+Recommended mode:
+- selective expansion
+
+Reason:
+- auto-starting a local bridge from the extension sounds magical, but it is the wrong product boundary
+- the better product is: SnapClip works immediately, and a local companion makes Claude handoff feel automatic when present
+- the bridge should disappear into the background, not become a setup tax or a visible subsystem users have to understand
+
+10-star product framing:
+
+> SnapClip should feel complete without setup, and upgraded when the local companion is installed.
+
+That means:
+- base product remains zero-setup
+- direct Claude session delivery is a premium local-power feature
+- the extension never blocks clipping because the companion is missing
+- the user should see connection state, not infrastructure state
+
+Do:
+- detect companion silently on open
+- show `Claude live handoff ready` when healthy
+- show `Install local companion` when missing
+- let companion manage Claude hooks and session discovery
+
+Do not:
+- ask users to reason about ports, tokens, or workspace ids in the main flow
+- make the side panel or modal feel broken when the companion is not installed
+- try to spawn arbitrary local processes directly from the extension
+
+### Engineering Review
+
+Recommended architecture:
+- companion app or menu-bar/background app
+- localhost API remains the contract between extension and companion
+- session-first discovery becomes the default integration path
+- workspace selection becomes fallback metadata, not primary UX
+
+Reason:
+- the extension can fetch localhost, but it cannot reliably install and manage a user-space process on its own
+- native messaging is possible, but heavier and more brittle than a simple local companion
+- current bridge flows are already localhost-based, so a companion preserves the smallest architectural leap
+
+Recommended contract:
+- `GET /health`
+- `GET /sessions/active`
+- `GET /sessions/recent`
+- `GET /claude/hooks/config`
+- `POST /claude/hooks/install`
+- `POST /send`
+- `GET /tasks/:id`
+
+Engineering rules:
+- no feature in capture/editor depends on the companion
+- all companion failures degrade to local-only clip behavior
+- no silent send failures
+- no raw infrastructure jargon in the UI unless the user opens advanced diagnostics
+
+### Product Decision
+
+Ship an optional local companion.
+
+The extension should:
+- clip
+- annotate
+- save locally
+- export packet
+
+The companion should unlock:
+- live Claude session discovery
+- direct send to open Claude sessions
+- hook installation and maintenance
+- deterministic bundle writing and task orchestration
+
+### Why Not Extension-Only Auto-Start
+
+The extension today:
+- can call `http://127.0.0.1:4311`
+- can detect whether something is already listening there
+- cannot robustly install and launch a background local server by itself
+
+Implication:
+- yes, users would need something installed locally for direct live Claude integration
+- no, they should not need it for the core SnapClip workflow
+
+### Companion UX
+
+Primary states:
+
+```text
+[User opens SnapClip]
+        |
+        v
+[Ping localhost companion]
+        |
+        +--> reachable
+        |      |
+        |      +--> Claude sessions found
+        |      |      -> show "Claude live handoff ready"
+        |      |
+        |      +--> no sessions
+        |             -> show "Open Claude to send directly"
+        |
+        +--> unreachable
+               -> show "Install local companion"
+```
+
+User-facing language should be:
+- connected
+- not installed
+- Claude not open
+- no live sessions found
+
+Not:
+- bridge failed
+- workspaces missing
+- localhost token mismatch
+
+### Responsibility Split
+
+```text
+[Chrome extension]
+    |
+    | local HTTP only
+    v
+[SnapClip Companion]
+    |
+    +--> health check
+    +--> active Claude sessions
+    +--> recent Claude sessions
+    +--> hook install / hook config
+    +--> bundle write + task state
+    +--> send/resume into Claude
+```
+
+Extension responsibilities:
+- detect companion
+- show clean connection state
+- build and send packet
+- remain fully useful without companion
+
+Companion responsibilities:
+- run locally
+- discover active sessions
+- manage Claude hooks
+- write/send bundles
+- expose stable localhost API
+
+### Session Discovery Model
+
+Session-first is the default.
+
+```text
+preferred
+  /sessions/active
+    -> live Claude sessions
+    -> choose session
+    -> send clip
+
+fallback
+  /workspaces
+    -> /sessions?workspaceId=...
+```
+
+Rule:
+- if active sessions are available, do not force workspace selection first
+- workspace remains metadata for routing and persistence
+
+### Install Flow
+
+```text
+[SnapClip sees no companion]
+        |
+        v
+[Install local companion CTA]
+        |
+        v
+[Download + install helper]
+        |
+        +--> install launch agent / background app
+        +--> start localhost server
+        +--> optionally install Claude hooks
+        |
+        v
+[SnapClip reconnects automatically]
+```
+
+Recommended v1:
+- macOS first
+- simple installer
+- optional launch-at-login
+- optional Claude hook install during setup
+
+Avoid in v1:
+- native messaging host
+- extension-driven shell bootstrap hacks
+- requiring terminal setup for normal users
+
+### API Contract
+
+```text
+GET  /health
+  -> companion version
+  -> claude available?
+  -> hooks installed?
+
+GET  /sessions/active
+  -> live sessions with label, cwd, workspace, last activity
+
+GET  /sessions/recent
+  -> recent fallback sessions if no hooks are active
+
+POST /claude/hooks/install
+  -> install or update hook config
+
+POST /send
+  -> write bundle
+  -> resume/send to selected Claude session
+  -> return task id and delivery state
+
+GET  /tasks/:id
+  -> poll delivery state
+```
+
+### Failure Model
+
+```text
+[companion missing]
+  -> clip still works
+  -> show install CTA
+
+[companion healthy, Claude closed]
+  -> clip still works
+  -> show "Open Claude to send directly"
+
+[companion healthy, send fails]
+  -> bundle still written locally
+  -> show explicit delivery failure
+
+[hook install fails]
+  -> keep companion usable
+  -> show "recent sessions only" mode
+```
+
+Rules:
+- local packet creation must survive Claude delivery failure
+- companion health must be checked separately from session availability
+- no single companion error should block save/export/clip flows
+
+### Implementation Stages
+
+#### Stage 1: Contract and states
+- add `/health` as first-class extension check
+- normalize UI copy around connection states
+- stop showing workspace-first bridge copy in main UX
+- acceptance:
+  - SnapClip opens cleanly with or without companion
+  - no raw bridge jargon on the happy path
+
+#### Stage 2: Session-first discovery
+- make `/sessions/active` the primary discovery path
+- retain workspace/session fallback for older bridge implementations
+- acceptance:
+  - active Claude sessions appear without workspace selection
+  - fallback still works for existing localhost bridge
+
+#### Stage 3: Companion packaging
+- package bridge as local companion app
+- add installer
+- add optional launch-at-login
+- acceptance:
+  - fresh user can install companion without terminal steps
+  - companion starts and exposes `/health`
+
+#### Stage 4: Hook setup
+- install and verify Claude hooks from the companion
+- expose clear setup state back to SnapClip
+- acceptance:
+  - user can enable live Claude discovery from a guided local flow
+  - failure degrades to recent-session or local-only mode
+
+#### Stage 5: Send reliability
+- preserve bundle-first delivery semantics
+- make send task state and failure states explicit
+- acceptance:
+  - send failure never loses the packet
+  - user always knows whether bundle creation succeeded
+
+### Test Plan
+
+#### Contract tests
+- `/health` unreachable
+- `/health` reachable but Claude unavailable
+- `/sessions/active` returns empty
+- `/sessions/active` returns malformed payload
+- `/send` returns delivered
+- `/send` returns bundle-only
+- `/send` returns failed after bundle creation
+
+#### Extension integration tests
+- companion absent -> clip/editor still work
+- companion healthy -> active sessions show
+- active-session endpoint missing -> workspace fallback still works
+- send failure -> saved packet remains available
+
+#### Manual QA
+- install flow from clean machine
+- SnapClip open with companion already running
+- SnapClip open with companion not installed
+- Claude open with active sessions
+- Claude closed
+- hook install success
+- hook install failure
+- send success
+- send failure after bundle creation
+
+### Acceptance Criteria
+
+- SnapClip is fully usable without the companion
+- companion presence is detected automatically
+- active Claude sessions are shown without workspace ceremony when supported
+- install path is obvious and local-first
+- packet creation and export remain independent of live Claude delivery
+- failure states are clear, calm, and technically honest
+
+### TODO Summary
+
+```text
+Now
+  -> add /health
+  -> normalize connection states
+  -> prefer /sessions/active
+
+Next
+  -> package companion
+  -> add installer
+  -> add hook setup
+
+Later
+  -> recent-session fallback
+  -> richer diagnostics
+  -> multi-target local handoff beyond Claude
+```
   -> update saved fields
 ```
 

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
+  getBridgeHealth,
   getBridgeConfig,
   getBridgeHookConfig,
   installBridgeHooks,
+  listBridgeActiveSessions,
   listBridgeApprovals,
   listBridgeSessions,
   listBridgeWorkspaces,
   setBridgeConfig,
   type BridgeApproval,
   type BridgeConfig,
+  type BridgeHealth,
   type BridgeHookInstallResponse,
   type BridgeSession,
   type BridgeWorkspace,
@@ -32,6 +35,8 @@ export function useBridgeState(options: {
   const [bridgeWorkspaces, setBridgeWorkspaces] = useState<BridgeWorkspace[]>([]);
   const [bridgeSessions, setBridgeSessions] = useState<BridgeSession[]>([]);
   const [bridgeApprovals, setBridgeApprovals] = useState<BridgeApproval[]>([]);
+  const [bridgeHealth, setBridgeHealth] = useState<BridgeHealth | null>(null);
+  const [bridgeDiscoveryMode, setBridgeDiscoveryMode] = useState<'active' | 'workspace'>('active');
   const [bridgeError, setBridgeError] = useState('');
   const [bridgeBaseUrl, setBridgeBaseUrl] = useState('http://127.0.0.1:4311');
   const [bridgeToken, setBridgeToken] = useState('snapclip-dev');
@@ -44,6 +49,32 @@ export function useBridgeState(options: {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [hasHydratedBridgeSelection, setHasHydratedBridgeSelection] = useState(false);
+
+  function buildActiveWorkspaces(sessions: BridgeSession[]): BridgeWorkspace[] {
+    const activeWorkspaceMap = new Map<string, BridgeWorkspace>();
+    sessions.forEach((session) => {
+      const existing = activeWorkspaceMap.get(session.workspaceId);
+      if (existing) {
+        existing.sessionCount += 1;
+        existing.totalSessionCount += 1;
+        existing.lastSeenAt = session.lastSeenAt ?? existing.lastSeenAt;
+        return;
+      }
+
+      activeWorkspaceMap.set(session.workspaceId, {
+        id: session.workspaceId,
+        name: session.workspaceName || session.workspaceId,
+        path: session.cwd,
+        sessionCount: 1,
+        totalSessionCount: 1,
+        hiddenSessionCount: 0,
+        lastSeenAt: session.lastSeenAt ?? null,
+        source: 'active_session',
+      });
+    });
+
+    return Array.from(activeWorkspaceMap.values());
+  }
 
   useEffect(() => {
     if (!enabled || !hasHydratedBridgeSelection) {
@@ -64,6 +95,8 @@ export function useBridgeState(options: {
     setBridgeWorkspaces([]);
     setBridgeSessions([]);
     setBridgeApprovals([]);
+    setBridgeHealth(null);
+    setBridgeDiscoveryMode('active');
     setBridgeError('');
     setHookSettingsPath('');
     setHookInstalledEvents([]);
@@ -101,16 +134,15 @@ export function useBridgeState(options: {
         setBridgeBaseUrl(config.baseUrl);
         setBridgeToken(config.token);
 
-        const [workspaces, hookConfig] = await Promise.all([
-          listBridgeWorkspaces(),
+        const [health, hookConfig] = await Promise.all([
+          getBridgeHealth(),
           getBridgeHookConfig().catch(() => null),
         ]);
         if (cancelled) {
           return;
         }
 
-        setBridgeWorkspaces(workspaces);
-        setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
+        setBridgeHealth(health);
         setHookSettingsPath(hookConfig?.settingsPath ?? '');
         setHookInstalledEvents(hookConfig?.installedEvents ?? []);
         const persistedWorkspaceId =
@@ -121,12 +153,49 @@ export function useBridgeState(options: {
           typeof persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId] === 'string'
             ? persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId]
             : '';
+
+        try {
+          const activeSessions = await listBridgeActiveSessions();
+          if (cancelled) {
+            return;
+          }
+
+          if (activeSessions.length) {
+            setBridgeDiscoveryMode('active');
+            setBridgeSessions(activeSessions);
+            const nextWorkspaces = buildActiveWorkspaces(activeSessions);
+            const nextSessionId = pickSessionId(activeSessions, persistedSessionId);
+            const nextWorkspaceId =
+              activeSessions.find((session) => session.id === nextSessionId)?.workspaceId ||
+              activeSessions[0]?.workspaceId ||
+              persistedWorkspaceId ||
+              '';
+            setBridgeWorkspaces(nextWorkspaces);
+            setSelectedSessionId(nextSessionId);
+            setSelectedWorkspaceId(nextWorkspaceId);
+            setBridgeError('');
+            setHasHydratedBridgeSelection(true);
+            return;
+          }
+        } catch {
+          // Fall back to workspace-scoped discovery.
+        }
+
+        const workspaces = await listBridgeWorkspaces();
+        if (cancelled) {
+          return;
+        }
+
+        setBridgeDiscoveryMode('workspace');
+        setBridgeWorkspaces(workspaces);
+        setBridgeError(workspaces.length ? '' : 'The local companion is running, but no configured workspaces were found.');
         setSelectedWorkspaceId((currentValue) => pickWorkspaceId(workspaces, currentValue || persistedWorkspaceId));
         setSelectedSessionId((currentValue) => currentValue || persistedSessionId);
         setHasHydratedBridgeSelection(true);
       } catch (error) {
         if (!cancelled) {
           setBridgeError(toBridgeErrorMessage(error));
+          setBridgeHealth(null);
           setBridgeWorkspaces([]);
           setBridgeSessions([]);
           setBridgeApprovals([]);
@@ -149,10 +218,12 @@ export function useBridgeState(options: {
   }, [enabled, reloadKey]);
 
   useEffect(() => {
-    if (!enabled || !selectedWorkspaceId) {
+    if (!enabled || (bridgeDiscoveryMode === 'workspace' && !selectedWorkspaceId)) {
       setBridgeSessions([]);
       setBridgeApprovals([]);
-      setSelectedSessionId('');
+      if (bridgeDiscoveryMode === 'workspace') {
+        setSelectedSessionId('');
+      }
       return;
     }
 
@@ -162,6 +233,25 @@ export function useBridgeState(options: {
       setIsSessionLoading(true);
 
       try {
+        if (bridgeDiscoveryMode === 'active') {
+          const sessions = await listBridgeActiveSessions();
+
+          if (cancelled) {
+            return;
+          }
+
+          const nextSessionId = pickSessionId(sessions, selectedSessionId);
+          setBridgeSessions(sessions);
+          setBridgeWorkspaces(buildActiveWorkspaces(sessions));
+          setBridgeApprovals([]);
+          setSelectedSessionId(nextSessionId);
+          setSelectedWorkspaceId(
+            sessions.find((session) => session.id === nextSessionId)?.workspaceId || sessions[0]?.workspaceId || '',
+          );
+          setBridgeError('');
+          return;
+        }
+
         const sessions = await listBridgeSessions(selectedWorkspaceId);
 
         if (cancelled) {
@@ -190,7 +280,7 @@ export function useBridgeState(options: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, selectedWorkspaceId]);
+  }, [bridgeDiscoveryMode, enabled, selectedWorkspaceId]);
 
   useEffect(() => {
     if (!enabled || !selectedWorkspaceId || !selectedSessionId) {
@@ -242,14 +332,37 @@ export function useBridgeState(options: {
     setBridgeBaseUrl(nextConfig.baseUrl);
     setBridgeToken(nextConfig.token);
 
-    const [workspaces, hookConfig] = await Promise.all([
-      listBridgeWorkspaces(),
+    const [health, hookConfig] = await Promise.all([
+      getBridgeHealth(),
       getBridgeHookConfig().catch(() => null),
     ]);
-    setBridgeWorkspaces(workspaces);
-    setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
+    setBridgeHealth(health);
     setHookSettingsPath(hookConfig?.settingsPath ?? '');
     setHookInstalledEvents(hookConfig?.installedEvents ?? []);
+    try {
+      const activeSessions = await listBridgeActiveSessions();
+      if (activeSessions.length) {
+        const nextSessionId = pickSessionId(activeSessions, selectedSessionId);
+        setBridgeDiscoveryMode('active');
+        setBridgeSessions(activeSessions);
+        setBridgeWorkspaces(buildActiveWorkspaces(activeSessions));
+        setBridgeApprovals([]);
+        setSelectedSessionId(nextSessionId);
+        setSelectedWorkspaceId(
+          activeSessions.find((session) => session.id === nextSessionId)?.workspaceId || activeSessions[0]?.workspaceId || '',
+        );
+        setBridgeError('');
+        setHasHydratedBridgeSelection(true);
+        return nextConfig;
+      }
+    } catch {
+      // Fall back to workspaces.
+    }
+    const workspaces = await listBridgeWorkspaces();
+    setBridgeDiscoveryMode('workspace');
+    setBridgeWorkspaces(workspaces);
+    setBridgeApprovals([]);
+    setBridgeError(workspaces.length ? '' : 'The local companion is running, but no configured workspaces were found.');
     const persistedSelection = await chrome.storage.local.get([
       STORAGE_KEYS.bridgeSelectedWorkspaceId,
       STORAGE_KEYS.bridgeSelectedSessionId,
@@ -270,7 +383,7 @@ export function useBridgeState(options: {
   }
 
   async function refreshSessions(workspaceId = selectedWorkspaceId) {
-    if (!workspaceId) {
+    if (bridgeDiscoveryMode !== 'active' && !workspaceId) {
       setBridgeSessions([]);
       setSelectedSessionId('');
       return [];
@@ -279,6 +392,19 @@ export function useBridgeState(options: {
     setIsSessionLoading(true);
 
     try {
+      if (bridgeDiscoveryMode === 'active') {
+        const sessions = await listBridgeActiveSessions();
+        const nextSessionId = pickSessionId(sessions, selectedSessionId);
+        setBridgeSessions(sessions);
+        setBridgeWorkspaces(buildActiveWorkspaces(sessions));
+        setSelectedSessionId(nextSessionId);
+        setSelectedWorkspaceId(
+          sessions.find((session) => session.id === nextSessionId)?.workspaceId || sessions[0]?.workspaceId || '',
+        );
+        setBridgeError('');
+        return sessions;
+      }
+
       const sessions = await listBridgeSessions(workspaceId);
       setBridgeSessions(sessions);
       setSelectedSessionId((currentValue) => pickSessionId(sessions, currentValue));
@@ -344,6 +470,8 @@ export function useBridgeState(options: {
     bridgeWorkspaces,
     bridgeSessions,
     bridgeApprovals,
+    bridgeHealth,
+    bridgeDiscoveryMode,
     bridgeError,
     bridgeBaseUrl,
     bridgeToken,
