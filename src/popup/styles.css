@@ -8,9 +8,17 @@
   color-scheme: dark;
 }
 
+html,
+body,
+#root {
+  width: 428px;
+  min-width: 428px;
+  min-height: 708px;
+}
+
 body {
   margin: 0;
-  min-width: 360px;
+  min-width: 428px;
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -67,10 +75,12 @@ button:focus-visible {
 
 .popup-shell {
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  min-height: 708px;
+  padding: 14px;
   overflow: visible;
   position: relative;
+  box-sizing: border-box;
 }
 
 .popup-shell::before {
@@ -132,10 +142,11 @@ button:focus-visible {
 
 .popup-header h1 {
   margin: 0;
-  font-size: 22px;
-  line-height: 0.98;
+  font-size: 23px;
+  line-height: 0.96;
   letter-spacing: -0.04em;
-  max-width: 10ch;
+  max-width: 14ch;
+  text-wrap: balance;
 }
 
 .eyebrow {
@@ -164,7 +175,7 @@ button:focus-visible {
 
 .lede {
   font-size: 12px;
-  max-width: 28ch;
+  max-width: 30ch;
 }
 
 .close-button {
@@ -228,7 +239,7 @@ button:focus-visible {
 }
 
 .shortcut-panel {
-  padding: 12px;
+  padding: 14px;
   border-radius: 16px;
   border: 1px solid rgba(156, 178, 209, 0.14);
   background: rgba(10, 15, 27, 0.74);
@@ -236,16 +247,16 @@ button:focus-visible {
 }
 
 .panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
 }
 
 .panel-hint {
   font-size: 11px;
   text-align: right;
-  max-width: 20ch;
+  max-width: 22ch;
 }
 
 .shortcut-list {
@@ -259,7 +270,7 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 11px;
+  padding: 11px 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #dbe6f7;
@@ -283,6 +294,10 @@ button:focus-visible {
   font: inherit;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.shortcut-chip span {
+  min-width: 0;
 }
 
 .utility-row {
