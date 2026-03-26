@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { buildClaudeHookConfig, installClaudeHookConfig } from '../hooks.js';
+import { buildClaudeHookConfig, getDefaultClaudeSettingsPath, installClaudeHookConfig } from '../hooks.js';
 
 test('buildClaudeHookConfig produces authenticated HTTP hooks for each supported event', () => {
   const config = buildClaudeHookConfig({
@@ -89,4 +89,8 @@ test('installClaudeHookConfig merges into settings.local.json without duplicatin
     parsed.hooks.PermissionRequest[0].hooks[0].url,
     'http://127.0.0.1:4311/hooks/permission-request',
   );
+});
+
+test('getDefaultClaudeSettingsPath targets the user Claude settings file', () => {
+  assert.equal(getDefaultClaudeSettingsPath('/repo'), join(homedir(), '.claude', 'settings.local.json'));
 });

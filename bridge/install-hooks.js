@@ -7,9 +7,9 @@ const config = resolveBridgeConfig();
 try {
   const result = await installClaudeHookConfig({
     cwd: config.cwd,
-    settingsPath: args.settingsPath,
-    baseUrl: args.baseUrl ?? `http://${config.host}:${config.port}`,
-    token: args.token ?? config.token,
+    settingsPath: args.settingsPath || undefined,
+    baseUrl: args.baseUrl || `http://${config.host}:${config.port}`,
+    token: args.token || config.token,
   });
 
   process.stdout.write(`Installed Claude Code hook config at ${result.settingsPath}\n`);

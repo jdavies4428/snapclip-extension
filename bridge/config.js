@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
 export function resolveBridgeConfig(overrides = {}) {
@@ -11,6 +12,7 @@ export function resolveBridgeConfig(overrides = {}) {
     port: Number(overrides.port ?? env.SNAPCLIP_BRIDGE_PORT ?? 4311),
     token: String(overrides.token ?? env.SNAPCLIP_BRIDGE_TOKEN ?? 'snapclip-dev'),
     workspaceRoots,
+    claudeProjectsRoot: resolve(overrides.claudeProjectsRoot ?? env.SNAPCLIP_CLAUDE_PROJECTS_ROOT ?? resolve(homedir(), '.claude', 'projects')),
     cwd,
   };
 }

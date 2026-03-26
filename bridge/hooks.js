@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
 const CLAUDE_HOOK_ENDPOINTS = {
@@ -14,8 +15,8 @@ const CLAUDE_HOOK_ENDPOINTS = {
 
 const REQUIRED_DISCOVERY_EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit'];
 
-export function getDefaultClaudeSettingsPath(cwd) {
-  return resolve(cwd, '.claude', 'settings.local.json');
+export function getDefaultClaudeSettingsPath(cwd = process.cwd()) {
+  return resolve(homedir(), '.claude', 'settings.local.json');
 }
 
 export function buildClaudeHookConfig({ baseUrl, token }) {
@@ -50,7 +51,7 @@ export async function installClaudeHookConfig({
   token,
   cwd = process.cwd(),
 }) {
-  const resolvedSettingsPath = resolve(settingsPath ?? getDefaultClaudeSettingsPath(cwd));
+  const resolvedSettingsPath = resolve(settingsPath || getDefaultClaudeSettingsPath(cwd));
   const existing = await readSettingsFile(resolvedSettingsPath);
   const additions = buildClaudeHookConfig({ baseUrl, token });
   const merged = mergeHookSettings(existing, additions);
@@ -71,7 +72,7 @@ export async function inspectClaudeHookConfig({
   baseUrl,
   token,
 }) {
-  const resolvedSettingsPath = resolve(settingsPath ?? getDefaultClaudeSettingsPath(cwd));
+  const resolvedSettingsPath = resolve(settingsPath || getDefaultClaudeSettingsPath(cwd));
   const existing = await readSettingsFile(resolvedSettingsPath);
   const expected = buildClaudeHookConfig({ baseUrl, token });
   const installedEvents = Object.entries(expected.hooks)

@@ -13,6 +13,7 @@ test('renderCompanionRunScript includes bridge env and entrypoint', () => {
   const script = renderCompanionRunScript({
     repoRoot: '/repo',
     nodePath: '/usr/local/bin/node',
+    claudePath: '/opt/homebrew/bin/claude',
     host: '127.0.0.1',
     port: 4311,
     token: 'snapclip-dev',
@@ -22,6 +23,8 @@ test('renderCompanionRunScript includes bridge env and entrypoint', () => {
 
   assert.match(script, /SNAPCLIP_BRIDGE_HOST='127\.0\.0\.1'/);
   assert.match(script, /SNAPCLIP_BRIDGE_WORKSPACES='\/repo,\/tmp\/ws'/);
+  assert.match(script, /SNAPCLIP_CLAUDE_BIN='\/opt\/homebrew\/bin\/claude'/);
+  assert.match(script, /export PATH='\/opt\/homebrew\/bin:/);
   assert.match(script, /bridge\/index\.js/);
 });
 

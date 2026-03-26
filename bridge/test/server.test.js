@@ -35,11 +35,13 @@ function createBaseTask(workspaceId, overrides = {}) {
 
 async function startTestBridge(options = {}) {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'snapclip-bridge-'));
+  const claudeProjectsRoot = options.claudeProjectsRoot ?? (await mkdtemp(join(tmpdir(), 'snapclip-claude-projects-')));
   const bridge = createBridgeServer({
     host: '127.0.0.1',
     port: 0,
     token: 'test-token',
     cwd: workspaceRoot,
+    claudeProjectsRoot,
     claudeRunner: async () => ({ stdout: 'submitted', stderr: '', code: 0 }),
     ...options,
   });
@@ -48,7 +50,7 @@ async function startTestBridge(options = {}) {
   const address = bridge.server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  return { bridge, workspaceRoot, baseUrl };
+  return { bridge, workspaceRoot, baseUrl, claudeProjectsRoot };
 }
 
 async function bridgeFetch(baseUrl, path, init = {}) {

@@ -1,6 +1,11 @@
 import { spawn } from 'node:child_process';
 import { relative } from 'node:path';
 
+function resolveClaudeCommand() {
+  const configuredBinary = String(process.env.SNAPCLIP_CLAUDE_BIN ?? '').trim();
+  return configuredBinary || 'claude';
+}
+
 export function buildClaudeResumePrompt(bundlePath, prompt, cwd) {
   const readablePath = relative(cwd, bundlePath) || bundlePath;
 
@@ -21,7 +26,7 @@ export function buildClaudeResumePrompt(bundlePath, prompt, cwd) {
 
 export async function runClaudeResume({ sessionId, prompt, cwd }) {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-r', sessionId, '-p', prompt], {
+    const child = spawn(resolveClaudeCommand(), ['-r', sessionId, '-p', prompt], {
       cwd,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -60,7 +65,7 @@ export async function runClaudeResume({ sessionId, prompt, cwd }) {
 export async function probeClaudeCli(options = {}) {
   const timeoutMs = options.timeoutMs ?? 1200;
   return new Promise((resolve) => {
-    const child = spawn('claude', ['--version'], {
+    const child = spawn(resolveClaudeCommand(), ['--version'], {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

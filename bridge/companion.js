@@ -1,7 +1,7 @@
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { resolveBridgeConfig } from './config.js';
@@ -23,6 +23,7 @@ export function renderCompanionRunScript(options) {
   const {
     repoRoot,
     nodePath,
+    claudePath,
     host,
     port,
     token,
@@ -39,6 +40,8 @@ export SNAPCLIP_BRIDGE_HOST=${shellEscape(host)}
 export SNAPCLIP_BRIDGE_PORT=${shellEscape(String(port))}
 export SNAPCLIP_BRIDGE_TOKEN=${shellEscape(token)}
 export SNAPCLIP_BRIDGE_WORKSPACES=${shellEscape(workspaceValue)}
+export SNAPCLIP_CLAUDE_BIN=${shellEscape(claudePath)}
+export PATH=${shellEscape(buildCompanionPathEnv(claudePath))}
 
 mkdir -p ${shellEscape(logsDir)}
 cd ${shellEscape(repoRoot)}
@@ -82,6 +85,7 @@ export async function installLocalCompanion(options = {}) {
   const config = resolveBridgeConfig(options);
   const repoRoot = resolve(options.repoRoot ?? config.cwd);
   const nodePath = resolve(options.nodePath ?? process.execPath);
+  const claudePath = resolveClaudeBinary(options.claudePath);
   const paths = resolveCompanionPaths(options.homeDir);
 
   await mkdir(paths.baseDir, { recursive: true });
@@ -93,6 +97,7 @@ export async function installLocalCompanion(options = {}) {
     renderCompanionRunScript({
       repoRoot,
       nodePath,
+      claudePath,
       host: config.host,
       port: config.port,
       token: config.token,
@@ -174,4 +179,24 @@ function assertDarwin() {
 
 function shellEscape(value) {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function resolveClaudeBinary(candidatePath) {
+  const explicitPath = String(candidatePath ?? '').trim();
+  if (explicitPath) {
+    return explicitPath;
+  }
+
+  try {
+    return execFileSync('which', ['claude'], { encoding: 'utf8' }).trim() || 'claude';
+  } catch {
+    return 'claude';
+  }
+}
+
+function buildCompanionPathEnv(claudePath) {
+  const currentPath = String(process.env.PATH ?? '');
+  const claudeDir = dirname(claudePath);
+  const segments = [claudeDir, currentPath].filter(Boolean);
+  return Array.from(new Set(segments.join(':').split(':').filter(Boolean))).join(':');
 }
