@@ -12,6 +12,11 @@ export type StartClipWorkflowMessage = {
   windowId?: number;
 };
 
+export type OpenClipEditorMessage = {
+  type: 'open-clip-editor';
+  clipId?: string;
+};
+
 export type CommitClipMessage = {
   type: 'commit-clip';
   clipMode: ClipMode;
@@ -83,6 +88,7 @@ export type CancelClipOverlayMessage = {
 export type SnapClipMessage =
   | OpenSidePanelMessage
   | StartClipWorkflowMessage
+  | OpenClipEditorMessage
   | CommitClipMessage
   | GetClipSessionMessage
   | UpdateClipTitleMessage

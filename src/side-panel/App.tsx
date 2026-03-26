@@ -7,17 +7,23 @@ import {
 import { buildBridgeTaskRequest } from '../shared/bridge/handoff';
 import type { SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
-import type { ClipHandoffRecord, ClipRecord, ClipSession } from '../shared/types/session';
+import type {
+  ChromeDebuggerHeader,
+  ChromeDebuggerNetworkRequest,
+  ClipHandoffRecord,
+  ClipRecord,
+  ClipSession,
+} from '../shared/types/session';
 import { describeEvidenceProfile, type EvidenceProfile } from '../shared/export/evidence';
 import { createClipSessionMarkdown } from '../shared/export/session-markdown';
 import { getClipAssetBlob } from '../shared/storage/blob-store';
-import { AnnotationCanvas } from './components/AnnotationCanvas';
 import { useClipAssetUrl } from './state/useClipAssetUrl';
 import { useBridgeHandoff } from './state/useBridgeHandoff';
 import { useBridgeState } from './state/useBridgeState';
 import { useClipSession } from './state/useClipSession';
 
 type HandoffScope = 'active_clip' | 'session';
+type DebuggerInspectorTab = 'headers' | 'request' | 'response';
 
 function getHandoffStatusMessage(task: BridgeTask, pendingApprovalCount: number) {
   if (task.delivery.state === 'queued') {
@@ -49,6 +55,305 @@ function getHostLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function getDebuggerRequestSeverity(request: ChromeDebuggerNetworkRequest): 0 | 1 | 2 | 3 {
+  if (request.failedReason || request.blockedReason || request.status === null) {
+    return 3;
+  }
+
+  if (typeof request.status === 'number' && request.status >= 400) {
+    return 2;
+  }
+
+  return request.isTruncated ? 1 : 0;
+}
+
+function getDebuggerRequestTone(request: ChromeDebuggerNetworkRequest): 'error' | 'warn' | 'log' {
+  return getDebuggerRequestSeverity(request) >= 2 ? 'error' : getDebuggerRequestSeverity(request) === 1 ? 'warn' : 'log';
+}
+
+function formatRequestStatus(request: ChromeDebuggerNetworkRequest): string {
+  return typeof request.status === 'number' ? String(request.status) : 'ERR';
+}
+
+function formatRequestLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname || '/'}${parsed.search || ''}`;
+  } catch {
+    return url;
+  }
+}
+
+function formatEncodedBytes(bytes: number | null | undefined): string {
+  if (typeof bytes !== 'number' || Number.isNaN(bytes) || bytes < 0) {
+    return 'n/a';
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 102.4) / 10} KB`;
+  }
+
+  return `${Math.round(bytes / (1024 * 102.4)) / 10} MB`;
+}
+
+function countRedactedHeaders(headers: ChromeDebuggerHeader[] | undefined): number {
+  return (headers ?? []).filter((header) => header.redacted).length;
+}
+
+function HeaderTable({
+  headers,
+  emptyLabel,
+}: {
+  headers: ChromeDebuggerHeader[] | undefined;
+  emptyLabel: string;
+}) {
+  if (!headers?.length) {
+    return <p className="network-inspector-empty">{emptyLabel}</p>;
+  }
+
+  return (
+    <div className="header-table" role="table" aria-label="Header table">
+      {headers.map((header, index) => (
+        <div className="header-row" key={`${header.name}:${header.value}:${index}`}>
+          <dt>{header.name}</dt>
+          <dd>{header.value}</dd>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DebuggerNetworkInspector({
+  snapshot,
+  selectedRequestId,
+  onSelectRequest,
+  activeTab,
+  onTabChange,
+}: {
+  snapshot: NonNullable<ClipRecord['runtimeContext']>['chromeDebugger'];
+  selectedRequestId: string | null;
+  onSelectRequest: (requestId: string) => void;
+  activeTab: DebuggerInspectorTab;
+  onTabChange: (tab: DebuggerInspectorTab) => void;
+}) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const sortedRequests = [...snapshot.network].sort((left, right) => {
+    const severityDelta = getDebuggerRequestSeverity(right) - getDebuggerRequestSeverity(left);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+
+    return new Date(right.timestamp || 0).getTime() - new Date(left.timestamp || 0).getTime();
+  });
+  const selectedRequest =
+    sortedRequests.find((request) => request.id === selectedRequestId) ?? sortedRequests[0] ?? null;
+  const redactedHeaderCount = sortedRequests.reduce(
+    (sum, request) =>
+      sum + countRedactedHeaders(request.requestHeaders) + countRedactedHeaders(request.responseHeaders),
+    0,
+  );
+
+  return (
+    <div className="network-inspector">
+      <div className="network-inspector-head">
+        <div className="network-inspector-copy">
+          <p className="panel-disclosure-label">Deep network inspector</p>
+          <p className="network-inspector-note">
+            Bounded local snapshot. Captured during this clip only. Sensitive values may be redacted before storage and export.
+          </p>
+        </div>
+        <div className="network-inspector-summary">
+          <span className="context-card-badge">{sortedRequests.length} requests</span>
+          <span className="context-card-badge">
+            {snapshot.observationWindowMs ?? 0}ms window
+          </span>
+          {redactedHeaderCount ? <span className="context-card-badge">{redactedHeaderCount} redacted values</span> : null}
+        </div>
+      </div>
+
+      {snapshot.attachError ? (
+        <p className="network-inspector-empty">
+          Chrome did not allow the extra deep snapshot for this page. Runtime summary evidence is still attached.
+        </p>
+      ) : null}
+
+      {!sortedRequests.length ? (
+        <p className="network-inspector-empty">
+          No request details were captured in the bounded snapshot. If the interesting request happened earlier, capture again and reproduce once.
+        </p>
+      ) : (
+        <div className="network-inspector-grid">
+          <div className="request-list" role="list" aria-label="Captured requests">
+            {sortedRequests.map((request) => (
+              <button
+                aria-pressed={selectedRequest?.id === request.id}
+                className={`request-row request-row-${getDebuggerRequestTone(request)} ${
+                  selectedRequest?.id === request.id ? 'request-row-active' : ''
+                }`}
+                key={request.id}
+                onClick={() => onSelectRequest(request.id)}
+                type="button"
+              >
+                <div className="request-row-head">
+                  <span className="runtime-event-badge">
+                    {request.resourceType ? `${request.method} ${request.resourceType}` : request.method}
+                  </span>
+                  <span className="request-row-status">{formatRequestStatus(request)}</span>
+                </div>
+                <strong>{formatRequestLabel(request.url)}</strong>
+                <p>{request.url}</p>
+                <code>
+                  {[
+                    request.mimeType,
+                    request.failedReason,
+                    request.blockedReason,
+                    request.fromServiceWorker ? 'service worker' : '',
+                    request.fromDiskCache ? 'disk cache' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'Captured request'}
+                </code>
+              </button>
+            ))}
+          </div>
+
+          {selectedRequest ? (
+            <section className="request-detail" aria-label="Selected request details">
+              <div className="request-detail-head">
+                <div>
+                  <p className="panel-disclosure-label">Selected request</p>
+                  <h3>{formatRequestLabel(selectedRequest.url)}</h3>
+                </div>
+                <span className={`context-card-badge context-card-badge-${getDebuggerRequestTone(selectedRequest)}`}>
+                  {formatRequestStatus(selectedRequest)}
+                </span>
+              </div>
+
+              <div className="inspector-tabs" role="tablist" aria-label="Request detail tabs">
+                {(['headers', 'request', 'response'] as DebuggerInspectorTab[]).map((tab) => (
+                  <button
+                    aria-selected={activeTab === tab}
+                    className={`inspector-tab ${activeTab === tab ? 'inspector-tab-active' : ''}`}
+                    key={tab}
+                    onClick={() => onTabChange(tab)}
+                    role="tab"
+                    type="button"
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <dl className="meta-grid meta-grid-compact">
+                <div>
+                  <dt>URL</dt>
+                  <dd>{selectedRequest.url}</dd>
+                </div>
+                <div>
+                  <dt>Method</dt>
+                  <dd>{selectedRequest.method}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{formatRequestStatus(selectedRequest)}{selectedRequest.statusText ? ` ${selectedRequest.statusText}` : ''}</dd>
+                </div>
+                <div>
+                  <dt>Type</dt>
+                  <dd>{selectedRequest.resourceType || 'n/a'}</dd>
+                </div>
+              </dl>
+
+              {activeTab === 'headers' ? (
+                <div className="network-inspector-section-stack">
+                  <div className="network-inspector-section">
+                    <p className="panel-disclosure-label">Request headers</p>
+                    <HeaderTable headers={selectedRequest.requestHeaders} emptyLabel="No request headers were retained." />
+                  </div>
+                  <div className="network-inspector-section">
+                    <p className="panel-disclosure-label">Response headers</p>
+                    <HeaderTable headers={selectedRequest.responseHeaders} emptyLabel="No response headers were retained." />
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === 'request' ? (
+                <div className="network-inspector-section-stack">
+                  <div className="network-inspector-section">
+                    <p className="panel-disclosure-label">Request metadata</p>
+                    <dl className="meta-grid meta-grid-compact">
+                      <div>
+                        <dt>Priority</dt>
+                        <dd>{selectedRequest.priority || 'n/a'}</dd>
+                      </div>
+                      <div>
+                        <dt>Request body</dt>
+                        <dd>{selectedRequest.hasRequestBody ? 'Available on page, not persisted by default' : 'None signaled'}</dd>
+                      </div>
+                      <div>
+                        <dt>Request headers</dt>
+                        <dd>{selectedRequest.requestHeaders?.length ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>Redactions</dt>
+                        <dd>{countRedactedHeaders(selectedRequest.requestHeaders)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === 'response' ? (
+                <div className="network-inspector-section-stack">
+                  <div className="network-inspector-section">
+                    <p className="panel-disclosure-label">Response metadata</p>
+                    <dl className="meta-grid meta-grid-compact">
+                      <div>
+                        <dt>MIME type</dt>
+                        <dd>{selectedRequest.mimeType || 'n/a'}</dd>
+                      </div>
+                      <div>
+                        <dt>Transfer size</dt>
+                        <dd>{formatEncodedBytes(selectedRequest.encodedDataLength)}</dd>
+                      </div>
+                      <div>
+                        <dt>Response body</dt>
+                        <dd>{selectedRequest.hasResponseBody ? 'Available, not persisted by default' : 'Not retained'}</dd>
+                      </div>
+                      <div>
+                        <dt>Response headers</dt>
+                        <dd>{selectedRequest.responseHeaders?.length ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>Cache</dt>
+                        <dd>{selectedRequest.fromDiskCache ? 'Disk cache' : selectedRequest.fromServiceWorker ? 'Service worker' : 'Network'}</dd>
+                      </div>
+                      <div>
+                        <dt>Blocked or failed</dt>
+                        <dd>{selectedRequest.failedReason || selectedRequest.blockedReason || 'No failure reason captured'}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedRequest.isTruncated ? (
+                <p className="network-inspector-footnote">Showing a bounded snapshot. Some request details were truncated to keep the packet compact.</p>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 async function ensureOffscreenDocument() {
@@ -214,20 +519,19 @@ function getClipHandoffSummary(handoff: ClipHandoffRecord): string {
 
 export default function App() {
   const { session, isLoading } = useClipSession();
-  const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const editorTitleInputRef = useRef<HTMLInputElement | null>(null);
-  const editorModalRef = useRef<HTMLElement | null>(null);
   const completedHandoffIdsRef = useRef<Set<string>>(new Set());
   const [activeClipId, setActiveClipId] = useState<string | null>(null);
   const [status, setStatus] = useState('Start a clip from the popup or with the keyboard shortcut.');
+  const [hasAssignedEditorShortcut, setHasAssignedEditorShortcut] = useState(true);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftNote, setDraftNote] = useState('');
   const [handoffTarget, setHandoffTarget] = useState<HandoffTarget>('claude');
   const [handoffIntent, setHandoffIntent] = useState<HandoffIntent>('fix');
   const [handoffScope, setHandoffScope] = useState<HandoffScope>('active_clip');
   const [evidenceProfile, setEvidenceProfile] = useState<EvidenceProfile>('balanced');
+  const [selectedDebuggerRequestId, setSelectedDebuggerRequestId] = useState<string | null>(null);
+  const [activeDebuggerInspectorTab, setActiveDebuggerInspectorTab] = useState<DebuggerInspectorTab>('headers');
   const [activeOverlayTabId, setActiveOverlayTabId] = useState<number | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const bridgeReloadKey = session ? `${session.id}:${session.clips.length}` : 'no-session';
   const {
     bridgeWorkspaces,
@@ -302,30 +606,6 @@ export default function App() {
             ? 'Creates a local Codex bundle you can paste or hand off manually.'
             : 'Creates a local bundle only and keeps it on this machine.'
         : 'Connect the local bridge when you are ready to send.';
-  const modalHandoffLabel =
-    handoffTarget === 'claude'
-      ? selectedWorkspace
-        ? selectedBridgeSession
-          ? `Claude -> ${selectedWorkspace.name} -> ${selectedBridgeSession.label}`
-          : `Claude bundle -> ${selectedWorkspace.name}`
-        : 'Claude -> bridge not connected'
-      : handoffTarget === 'codex'
-        ? selectedWorkspace
-          ? `Codex bundle -> ${selectedWorkspace.name}`
-          : 'Codex bundle -> bridge not connected'
-        : selectedWorkspace
-          ? `Local bundle -> ${selectedWorkspace.name}`
-          : 'Local bundle -> bridge not connected';
-  const modalSendLabel = isBridgeSubmitting
-    ? 'Preparing...'
-    : handoffTarget === 'claude'
-      ? selectedBridgeSession
-        ? 'Send current clip'
-        : 'Create current bundle'
-      : handoffTarget === 'codex'
-        ? 'Prepare current clip'
-        : 'Create current bundle';
-
   useEffect(() => {
     if (!handoffTask || (handoffTask.delivery.state !== 'queued' && handoffTask.delivery.state !== 'delivering')) {
       return;
@@ -384,22 +664,9 @@ export default function App() {
   useEffect(() => {
     setDraftTitle(activeClip?.title ?? '');
     setDraftNote(activeClip?.note ?? '');
+    setSelectedDebuggerRequestId(null);
+    setActiveDebuggerInspectorTab('headers');
   }, [activeClip?.id, activeClip?.note, activeClip?.title]);
-
-  useEffect(() => {
-    if (!activeClip || isEditorOpen) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      titleInputRef.current?.focus();
-      titleInputRef.current?.select();
-    }, 30);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [activeClip?.id, isEditorOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -444,6 +711,32 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadEditorShortcutBinding() {
+      try {
+        const commands = await chrome.commands.getAll();
+        if (cancelled) {
+          return;
+        }
+
+        const editorCommand = commands.find((command) => command.name === 'open-last-clip-editor');
+        setHasAssignedEditorShortcut(Boolean(editorCommand?.shortcut?.trim()));
+      } catch {
+        if (!cancelled) {
+          setHasAssignedEditorShortcut(false);
+        }
+      }
+    }
+
+    void loadEditorShortcutBinding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeOverlayTabId) {
       return;
     }
@@ -477,6 +770,37 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [activeOverlayTabId]);
+
+  useEffect(() => {
+    if (hasAssignedEditorShortcut) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!activeClip || !event.shiftKey || event.code !== 'KeyE') {
+        return;
+      }
+
+      const usesEditorShortcut = event.altKey || event.metaKey;
+      if (!usesEditorShortcut || event.ctrlKey) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) {
+        return;
+      }
+
+      event.preventDefault();
+      void openClipEditor();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeClip, hasAssignedEditorShortcut]);
 
   async function openPanelForCurrentWindow() {
     const tab = await resolveCaptureTargetTab();
@@ -582,19 +906,6 @@ export default function App() {
       clipId: activeClip.id,
       title,
     });
-  }
-
-  async function saveAnnotations(annotations: ClipRecord['annotations']) {
-    if (!activeClip) {
-      return;
-    }
-
-    const response = (await chrome.runtime.sendMessage({
-      type: 'update-clip-annotations',
-      clipId: activeClip.id,
-      annotations,
-    })) as SnapClipMessageResponse;
-    setStatus(response.ok ? 'Annotations saved.' : response.error);
   }
 
   async function saveHandoffMetadata(clipId: string, handoff: ClipHandoffRecord) {
@@ -763,6 +1074,29 @@ export default function App() {
     }
   }
 
+  async function openClipEditor(clipId?: string) {
+    const targetClipId = clipId ?? activeClip?.id;
+    if (!targetClipId) {
+      setStatus('Capture a clip first, then open the editor.');
+      return;
+    }
+
+    if (clipId) {
+      setActiveClipId(clipId);
+    }
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: 'open-clip-editor',
+        clipId: targetClipId,
+      })) as SnapClipMessageResponse;
+
+      setStatus(response.ok ? 'Opened the clip editor on the page.' : response.error);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to open the clip editor.');
+    }
+  }
+
   useEffect(() => {
     if (!activeClip) {
       return;
@@ -790,65 +1124,6 @@ export default function App() {
       window.clearTimeout(timeoutId);
     };
   }, [activeClip, draftNote]);
-
-  useEffect(() => {
-    if (!isEditorOpen) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      editorTitleInputRef.current?.focus();
-      editorTitleInputRef.current?.select();
-    }, 30);
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setIsEditorOpen(false);
-        return;
-      }
-
-      if (event.key !== 'Tab') {
-        return;
-      }
-
-      const modal = editorModalRef.current;
-      if (!modal) {
-        return;
-      }
-
-      const focusableElements = Array.from(
-        modal.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute('disabled'));
-
-      if (!focusableElements.length) {
-        return;
-      }
-
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey && activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
-        return;
-      }
-
-      if (!event.shiftKey && activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.clearTimeout(timeoutId);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isEditorOpen]);
 
   return (
     <main className="panel-shell">
@@ -893,17 +1168,12 @@ export default function App() {
                     <div className="snapshot-card-title-block">
                       <p className="eyebrow">Active clip</p>
                       <div className="title-row">
-                        <input
-                          className="clip-title-input"
-                          onChange={(event) => setDraftTitle(event.target.value)}
-                          placeholder="Clip name"
-                          ref={titleInputRef}
-                          type="text"
-                          value={draftTitle}
-                        />
+                        <div className="active-clip-title-stack">
+                          <h2 className="active-clip-title">{draftTitle || activeClip.title || 'Clip'}</h2>
+                          <p className="subtitle">{activeClip.page.title}</p>
+                        </div>
                         <span className="mode-chip">{activeClip.clipMode}</span>
                       </div>
-                      <p className="subtitle">{activeClip.page.title}</p>
                       <p className="clip-meta-line">
                         {activeClipHost} • {activeClip.page.viewport.width} x {activeClip.page.viewport.height} @{' '}
                         {activeClip.page.viewport.dpr}x • Crop {activeClip.crop.width} x {activeClip.crop.height}
@@ -924,9 +1194,9 @@ export default function App() {
                   <div className="active-clip-grid">
                     <div className="active-preview-stack">
                       <button
-                        aria-label="Open the annotation editor for the active clip"
+                        aria-label="Open the annotation editor on the page"
                         className="preview-stage"
-                        onClick={() => setIsEditorOpen(true)}
+                        onClick={() => void openClipEditor()}
                         type="button"
                       >
                         {activeClipImageUrl ? (
@@ -939,8 +1209,8 @@ export default function App() {
 
                     <div className="active-clip-sidebar">
                       <div className="annotation-actions annotation-actions-hero">
-                        <button onClick={() => setIsEditorOpen(true)} type="button">
-                          Open editor
+                        <button onClick={() => void openClipEditor()} type="button">
+                          Edit on page
                         </button>
                         <button className="secondary" onClick={copyCurrentImage} type="button">
                           Copy image
@@ -950,16 +1220,14 @@ export default function App() {
                         </button>
                       </div>
 
-                      <label className="field-block prompt-block">
+                      <div className="field-block">
                         <span>Prompt for the LLM</span>
-                        <textarea
-                          className="note-input"
-                          key={activeClip.id}
-                          onChange={(event) => setDraftNote(event.target.value)}
-                          placeholder="Enter prompt for the LLM..."
-                          value={draftNote}
-                        />
-                      </label>
+                        <div className={`prompt-preview ${draftNote.trim() ? '' : 'prompt-preview-empty'}`}>
+                          {draftNote.trim() || 'No prompt yet. Use Edit on page to add instructions for the model.'}
+                        </div>
+                      </div>
+
+                      <p className="preview-caption">Double-click a saved clip to reopen it in the page editor.</p>
 
                       <details className="panel-disclosure">
                         <summary>Clip details</summary>
@@ -1371,30 +1639,13 @@ export default function App() {
                             </div>
                           ) : null}
 
-                          {chromeDebugger.network.length ? (
-                            <div className="runtime-event-list">
-                              {chromeDebugger.network.map((request) => (
-                                <article
-                                  className={`runtime-event runtime-event-${
-                                    request.failedReason || request.blockedReason || request.status === null ? 'error' : 'log'
-                                  }`}
-                                  key={request.id}
-                                >
-                                  <div className="runtime-event-head">
-                                    <span className="runtime-event-badge">
-                                      {request.resourceType ? `${request.method} ${request.resourceType}` : request.method}
-                                    </span>
-                                    <time>{typeof request.status === 'number' ? request.status : 'ERR'}</time>
-                                  </div>
-                                  <p>{request.url}</p>
-                                  <code>
-                                    {[request.mimeType, request.failedReason, request.blockedReason].filter(Boolean).join(' · ') ||
-                                      'Chrome debugger snapshot'}
-                                  </code>
-                                </article>
-                              ))}
-                            </div>
-                          ) : null}
+                          <DebuggerNetworkInspector
+                            activeTab={activeDebuggerInspectorTab}
+                            onSelectRequest={setSelectedDebuggerRequestId}
+                            onTabChange={setActiveDebuggerInspectorTab}
+                            selectedRequestId={selectedDebuggerRequestId}
+                            snapshot={chromeDebugger}
+                          />
                         </div>
                       ) : null}
                     </div>
@@ -1413,17 +1664,14 @@ export default function App() {
                   </div>
                   <div className="clip-thumb-grid">
                     {session.clips.map((clip, index) => (
-                      <ClipThumbnailButton
-                        clip={clip}
-                        index={index}
-                        isActive={clip.id === activeClip.id}
-                        key={clip.id}
-                        onEdit={(clipId) => {
-                          setActiveClipId(clipId);
-                          setIsEditorOpen(true);
-                        }}
-                        onSelect={setActiveClipId}
-                      />
+                        <ClipThumbnailButton
+                          clip={clip}
+                          index={index}
+                          isActive={clip.id === activeClip.id}
+                          key={clip.id}
+                          onEdit={openClipEditor}
+                          onSelect={setActiveClipId}
+                        />
                     ))}
                   </div>
                   <details className="panel-disclosure">
@@ -1447,91 +1695,6 @@ export default function App() {
               </aside>
             </section>
 
-            {isEditorOpen ? (
-              <div className="clip-editor-modal-backdrop" onClick={() => setIsEditorOpen(false)} role="presentation">
-                <section
-                  aria-label="Clip editor"
-                  aria-modal="true"
-                  className="clip-editor-modal"
-                  onClick={(event) => event.stopPropagation()}
-                  ref={editorModalRef}
-                  role="dialog"
-                >
-                  <div className="clip-editor-modal-head">
-                    <div>
-                      <p className="eyebrow">Editor</p>
-                      <h2>{draftTitle || activeClip.title || 'Clip'}</h2>
-                      <p className="subtitle">Tune the evidence before you copy, export, or send the packet.</p>
-                    </div>
-                    <button
-                      aria-label="Close editor"
-                      className="secondary clip-editor-close"
-                      onClick={() => setIsEditorOpen(false)}
-                      type="button"
-                    >
-                      X
-                    </button>
-                  </div>
-
-                  <div className="clip-editor-modal-grid">
-                    <div className="clip-editor-stage">
-                      <AnnotationCanvas clip={activeClip} imageUrl={activeClipImageUrl} onChange={saveAnnotations} />
-                    </div>
-                    <aside className="clip-editor-sidebar">
-                      <label className="field-block">
-                        <span>Clip title</span>
-                        <input
-                          className="clip-title-input clip-title-input-compact"
-                          onChange={(event) => setDraftTitle(event.target.value)}
-                          placeholder="Clip name"
-                          ref={editorTitleInputRef}
-                          type="text"
-                          value={draftTitle}
-                        />
-                      </label>
-
-                      <div className="annotation-actions annotation-actions-editor">
-                        <button
-                          disabled={isBridgeLoading || isBridgeSubmitting || !selectedWorkspaceId}
-                          onClick={() => void submitHandoff('active_clip')}
-                          type="button"
-                        >
-                          {modalSendLabel}
-                        </button>
-                        <button onClick={copyCurrentImage} type="button">
-                          Copy image
-                        </button>
-                        <button className="secondary" onClick={copyCurrentInstructions} type="button">
-                          Copy prompt
-                        </button>
-                        <button className="secondary" onClick={() => setIsEditorOpen(false)} type="button">
-                          Done
-                        </button>
-                      </div>
-
-                      <div className="clip-editor-handoff">
-                        <p className="eyebrow">Current handoff</p>
-                        <p className="clip-editor-handoff-label">{modalHandoffLabel}</p>
-                        <p className="clip-editor-handoff-copy">
-                          Uses the active bridge settings from the main workspace. {handoffSummary}
-                        </p>
-                      </div>
-
-                      <label className="field-block">
-                        <span>Prompt for the LLM</span>
-                        <textarea
-                          className="note-input"
-                          key={`${activeClip.id}-modal`}
-                          onChange={(event) => setDraftNote(event.target.value)}
-                          placeholder="Enter prompt for the LLM..."
-                          value={draftNote}
-                        />
-                      </label>
-                    </aside>
-                  </div>
-                </section>
-              </div>
-            ) : null}
           </>
         ) : (
           <section className="empty-state empty-state-plain">

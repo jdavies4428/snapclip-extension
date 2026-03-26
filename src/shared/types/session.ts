@@ -111,12 +111,19 @@ export const chromeDebuggerLogEntrySchema = z.object({
   timestamp: z.string().nullable().optional(),
 });
 
+export const chromeDebuggerHeaderSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+  redacted: z.boolean().optional(),
+});
+
 export const chromeDebuggerNetworkRequestSchema = z.object({
   id: z.string(),
   method: z.string(),
   url: z.string(),
   resourceType: z.string().nullable().optional(),
   status: z.number().nullable().optional(),
+  statusText: z.string().nullable().optional(),
   mimeType: z.string().nullable().optional(),
   priority: z.string().nullable().optional(),
   encodedDataLength: z.number().nullable().optional(),
@@ -124,6 +131,15 @@ export const chromeDebuggerNetworkRequestSchema = z.object({
   blockedReason: z.string().nullable().optional(),
   fromDiskCache: z.boolean().optional(),
   fromServiceWorker: z.boolean().optional(),
+  requestHeaders: z.array(chromeDebuggerHeaderSchema).optional(),
+  responseHeaders: z.array(chromeDebuggerHeaderSchema).optional(),
+  requestHeadersText: z.string().nullable().optional(),
+  responseHeadersText: z.string().nullable().optional(),
+  hasRequestHeaders: z.boolean().optional(),
+  hasResponseHeaders: z.boolean().optional(),
+  hasRequestBody: z.boolean().optional(),
+  hasResponseBody: z.boolean().optional(),
+  isTruncated: z.boolean().optional(),
   timestamp: z.string().nullable().optional(),
 });
 
@@ -140,6 +156,8 @@ export const chromeDebuggerContextSchema = z.object({
   capturedAt: z.string(),
   attachError: z.string().nullable().optional(),
   detachReason: z.string().nullable().optional(),
+  observationWindowMs: z.number().optional(),
+  networkEntryLimit: z.number().optional(),
   currentUrl: z.string(),
   currentTitle: z.string(),
   frameCount: z.number(),
@@ -243,6 +261,7 @@ export type RuntimeEvent = z.infer<typeof runtimeEventSchema>;
 export type RuntimeSummary = z.infer<typeof runtimeSummarySchema>;
 export type NetworkRequest = z.infer<typeof networkRequestSchema>;
 export type ChromeDebuggerLogEntry = z.infer<typeof chromeDebuggerLogEntrySchema>;
+export type ChromeDebuggerHeader = z.infer<typeof chromeDebuggerHeaderSchema>;
 export type ChromeDebuggerNetworkRequest = z.infer<typeof chromeDebuggerNetworkRequestSchema>;
 export type ChromeDebuggerFrame = z.infer<typeof chromeDebuggerFrameSchema>;
 export type ChromeDebuggerContext = z.infer<typeof chromeDebuggerContextSchema>;

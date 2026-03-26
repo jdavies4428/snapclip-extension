@@ -31,6 +31,14 @@ function summarizeRuntime(runtimeContext: RuntimeContext | null): string[] {
   ];
 
   if (runtimeContext.chromeDebugger) {
+    const requestHeaderCount = runtimeContext.chromeDebugger.network.reduce(
+      (sum, request) => sum + (request.requestHeaders?.length ?? 0),
+      0,
+    );
+    const responseHeaderCount = runtimeContext.chromeDebugger.network.reduce(
+      (sum, request) => sum + (request.responseHeaders?.length ?? 0),
+      0,
+    );
     summary.push(
       `- Chrome debugger snapshot: ${runtimeContext.chromeDebugger.attachError || 'attached'}`,
       `- Chrome debugger frames: ${runtimeContext.chromeDebugger.frameCount}`,
@@ -38,6 +46,8 @@ function summarizeRuntime(runtimeContext: RuntimeContext | null): string[] {
       `- Chrome debugger JS heap used: ${runtimeContext.chromeDebugger.performance.jsHeapUsedSize ?? 'n/a'}`,
       `- Chrome debugger logs: ${runtimeContext.chromeDebugger.logs.length}`,
       `- Chrome debugger requests: ${runtimeContext.chromeDebugger.network.length}`,
+      `- Chrome debugger request headers retained: ${requestHeaderCount}`,
+      `- Chrome debugger response headers retained: ${responseHeaderCount}`,
     );
   }
 

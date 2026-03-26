@@ -68,7 +68,15 @@ export function createClipSessionMarkdown(session: ClipSession): string {
     const chromeDebuggerNetwork = clip.runtimeContext?.chromeDebugger?.network.length
       ? clip.runtimeContext.chromeDebugger.network.map((request) => {
           const status = request.status === null || typeof request.status === 'undefined' ? 'ERR' : String(request.status);
-          const extra = [request.mimeType, request.failedReason, request.blockedReason].filter(Boolean).join(' | ');
+          const extra = [
+            request.mimeType,
+            request.failedReason,
+            request.blockedReason,
+            request.hasRequestHeaders ? `${request.requestHeaders?.length ?? 0} req headers` : '',
+            request.hasResponseHeaders ? `${request.responseHeaders?.length ?? 0} res headers` : '',
+          ]
+            .filter(Boolean)
+            .join(' | ');
           return `- ${request.method} ${request.url} -> ${status}${extra ? ` (${extra})` : ''}`;
         })
       : ['- No Chrome debugger network snapshot captured.'];

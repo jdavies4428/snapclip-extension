@@ -1,8 +1,51 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+type ShortcutCommandName = 'start-region-clip' | 'start-visible-clip' | 'open-last-clip-editor';
+
+const FALLBACK_SHORTCUT_LABELS: Record<ShortcutCommandName, string> = {
+  'start-region-clip': 'Option/Alt + Shift + S',
+  'start-visible-clip': 'Option/Alt + Shift + D',
+  'open-last-clip-editor': 'Option/Alt + Shift + E',
+};
 
 export default function App() {
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [shortcutLabels, setShortcutLabels] = useState<Record<ShortcutCommandName, string>>(FALLBACK_SHORTCUT_LABELS);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadShortcutLabels() {
+      try {
+        const commands = await chrome.commands.getAll();
+        if (cancelled) {
+          return;
+        }
+
+        const nextLabels = { ...FALLBACK_SHORTCUT_LABELS };
+        for (const command of commands) {
+          if (!command.name || !(command.name in nextLabels)) {
+            continue;
+          }
+
+          const name = command.name as ShortcutCommandName;
+          nextLabels[name] = command.shortcut?.trim() || 'Set in Chrome shortcuts';
+        }
+
+        setShortcutLabels(nextLabels);
+      } catch (error) {
+        console.warn('Failed to load Chrome shortcut labels.', error);
+      }
+    }
+
+    void loadShortcutLabels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function isLaunchablePage(url?: string): boolean {
     if (!url) {
       return false;
@@ -128,16 +171,24 @@ export default function App() {
       <section className="shortcut-panel" aria-label="Keyboard shortcuts">
         <div className="panel-head">
           <p className="eyebrow">Shortcuts</p>
-          <p className="panel-hint">Use these when you want to skip the popup entirely.</p>
+          <p className="panel-hint">Use these when you want the quick clipboard lane instead of the full editor.</p>
         </div>
         <div className="shortcut-list">
           <div className="shortcut-chip">
             <span>Area</span>
-            <kbd>Option/Alt + Shift + S</kbd>
+            <kbd>{shortcutLabels['start-region-clip']}</kbd>
           </div>
           <div className="shortcut-chip">
             <span>Visible</span>
-            <kbd>Option/Alt + Shift + D</kbd>
+            <kbd>{shortcutLabels['start-visible-clip']}</kbd>
+          </div>
+          <div
+            className={`shortcut-chip ${
+              shortcutLabels['open-last-clip-editor'] === 'Set in Chrome shortcuts' ? 'shortcut-chip-warning' : ''
+            }`}
+          >
+            <span>Edit latest</span>
+            <kbd>{shortcutLabels['open-last-clip-editor']}</kbd>
           </div>
         </div>
       </section>

@@ -1,50 +1,69 @@
-import type { ClipRecord, NetworkRequest, RuntimeContext, RuntimeEvent } from '../types/session';
+import type { ChromeDebuggerHeader, ClipRecord, NetworkRequest, RuntimeContext, RuntimeEvent } from '../types/session';
 
 export type EvidenceProfile = 'lean' | 'balanced' | 'full';
 
 type RuntimeLimits = {
   maxEvents: number;
   maxNetwork: number;
+  maxHeaders: number;
   maxHeadings: number;
   maxButtons: number;
   maxFields: number;
   maxSelectedTextLength: number;
   maxEventMessageLength: number;
   maxNetworkErrorLength: number;
+  maxHeaderValueLength: number;
 };
 
 const PROFILE_LIMITS: Record<EvidenceProfile, RuntimeLimits> = {
   lean: {
     maxEvents: 1,
     maxNetwork: 2,
+    maxHeaders: 4,
     maxHeadings: 2,
     maxButtons: 3,
     maxFields: 3,
     maxSelectedTextLength: 140,
     maxEventMessageLength: 120,
     maxNetworkErrorLength: 100,
+    maxHeaderValueLength: 80,
   },
   balanced: {
     maxEvents: 4,
     maxNetwork: 4,
+    maxHeaders: 8,
     maxHeadings: 4,
     maxButtons: 5,
     maxFields: 5,
     maxSelectedTextLength: 260,
     maxEventMessageLength: 180,
     maxNetworkErrorLength: 150,
+    maxHeaderValueLength: 120,
   },
   full: {
     maxEvents: 8,
     maxNetwork: 12,
+    maxHeaders: 14,
     maxHeadings: 6,
     maxButtons: 8,
     maxFields: 8,
     maxSelectedTextLength: 400,
     maxEventMessageLength: 260,
     maxNetworkErrorLength: 220,
+    maxHeaderValueLength: 180,
   },
 };
+
+const SENSITIVE_HEADER_NAMES = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'proxy-authorization',
+  'x-api-key',
+  'x-auth-token',
+  'x-csrf-token',
+  'x-xsrf-token',
+]);
 
 function compactWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -89,6 +108,54 @@ export function redactUrlQuery(url: string): string {
     const [base] = withoutHash.split('?', 1);
     return `${base || url}${String(url).includes('?') ? '?[redacted]' : ''}${String(url).includes('#') ? '#[redacted]' : ''}`;
   }
+}
+
+function isSensitiveHeaderName(name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  return (
+    SENSITIVE_HEADER_NAMES.has(normalized) ||
+    /(token|secret|session|csrf|xsrf|auth)/i.test(normalized)
+  );
+}
+
+export function sanitizeDebuggerHeader(
+  header: ChromeDebuggerHeader,
+  maxValueLength: number,
+): ChromeDebuggerHeader {
+  if (isSensitiveHeaderName(header.name)) {
+    return {
+      name: header.name,
+      value: '[redacted]',
+      redacted: true,
+    };
+  }
+
+  return {
+    name: truncate(header.name, 80),
+    value: truncate(header.value, maxValueLength),
+    redacted: Boolean(header.redacted),
+  };
+}
+
+export function sanitizeDebuggerHeaders(
+  headers: ChromeDebuggerHeader[],
+  maxHeaders: number,
+  maxValueLength: number,
+): { headers: ChromeDebuggerHeader[]; isTruncated: boolean } {
+  const sanitized = headers.slice(0, maxHeaders).map((header) => sanitizeDebuggerHeader(header, maxValueLength));
+
+  return {
+    headers: sanitized,
+    isTruncated: headers.length > maxHeaders,
+  };
+}
+
+export function formatDebuggerHeadersText(headers: ChromeDebuggerHeader[]): string | null {
+  if (!headers.length) {
+    return null;
+  }
+
+  return headers.map((header) => `${header.name}: ${header.value}`).join('\n');
 }
 
 function dedupeRuntimeEvents(events: RuntimeEvent[]): RuntimeEvent[] {
@@ -195,13 +262,34 @@ export function normalizeRuntimeContext(
             text: truncate(entry.text, limits.maxEventMessageLength),
             url: entry.url ? redactUrlQuery(entry.url) : entry.url,
           })),
-          network: runtimeContext.chromeDebugger.network.slice(0, limits.maxNetwork).map((entry) => ({
-            ...entry,
-            url: redactUrlQuery(entry.url),
-            mimeType: entry.mimeType ? truncate(entry.mimeType, 60) : entry.mimeType,
-            failedReason: entry.failedReason ? truncate(entry.failedReason, limits.maxNetworkErrorLength) : entry.failedReason,
-            blockedReason: entry.blockedReason ? truncate(entry.blockedReason, limits.maxNetworkErrorLength) : entry.blockedReason,
-          })),
+          network: runtimeContext.chromeDebugger.network.slice(0, limits.maxNetwork).map((entry) => {
+            const requestHeaders = sanitizeDebuggerHeaders(
+              entry.requestHeaders ?? [],
+              limits.maxHeaders,
+              limits.maxHeaderValueLength,
+            );
+            const responseHeaders = sanitizeDebuggerHeaders(
+              entry.responseHeaders ?? [],
+              limits.maxHeaders,
+              limits.maxHeaderValueLength,
+            );
+
+            return {
+              ...entry,
+              url: redactUrlQuery(entry.url),
+              statusText: entry.statusText ? truncate(entry.statusText, 60) : entry.statusText,
+              mimeType: entry.mimeType ? truncate(entry.mimeType, 60) : entry.mimeType,
+              failedReason: entry.failedReason ? truncate(entry.failedReason, limits.maxNetworkErrorLength) : entry.failedReason,
+              blockedReason: entry.blockedReason ? truncate(entry.blockedReason, limits.maxNetworkErrorLength) : entry.blockedReason,
+              requestHeaders: requestHeaders.headers,
+              responseHeaders: responseHeaders.headers,
+              requestHeadersText: formatDebuggerHeadersText(requestHeaders.headers),
+              responseHeadersText: formatDebuggerHeadersText(responseHeaders.headers),
+              hasRequestHeaders: Boolean(entry.hasRequestHeaders && requestHeaders.headers.length),
+              hasResponseHeaders: Boolean(entry.hasResponseHeaders && responseHeaders.headers.length),
+              isTruncated: Boolean(entry.isTruncated || requestHeaders.isTruncated || responseHeaders.isTruncated),
+            };
+          }),
         }
       : null,
   };

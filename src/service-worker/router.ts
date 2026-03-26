@@ -1,9 +1,9 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
-import { cancelClipOverlay, startClipWorkflow } from './clipping';
+import { cancelClipOverlay, openSavedClipEditor, startClipWorkflow } from './clipping';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
-import { getClipSession, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
+import { getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
 
 async function openSidePanelForActiveWindow(): Promise<void> {
   const tab = await getActiveTab();
@@ -32,6 +32,38 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
         await startClipWorkflow(message.clipMode, {
           tabId: message.tabId,
           windowId: message.windowId,
+          interactive: true,
+        });
+        return { ok: true };
+      } catch (error) {
+        const errorMessage = normalizeLaunchError(error);
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.lastLaunchError]: errorMessage,
+        });
+        return { ok: false, error: errorMessage };
+      }
+    }
+    case 'open-clip-editor': {
+      try {
+        await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
+        const session = await getClipSession();
+        const fallbackClipId = session?.activeClipId ?? session?.clips.at(-1)?.id ?? null;
+        const clipId = message.clipId ?? fallbackClipId;
+
+        if (!clipId) {
+          return { ok: false, error: 'Capture a clip first, then open the editor.' };
+        }
+
+        const clip = await getStoredClipRecord(clipId);
+        if (!clip) {
+          return { ok: false, error: 'That saved clip is no longer available.' };
+        }
+
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.lastCapturedClipId]: clip.id,
+        });
+
+        await openSavedClipEditor(clip, {
           interactive: true,
         });
         return { ok: true };

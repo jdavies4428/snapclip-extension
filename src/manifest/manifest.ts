@@ -27,6 +27,13 @@ export default defineManifest({
       },
       description: 'Clip the full visible current tab.',
     },
+    'open-last-clip-editor': {
+      suggested_key: {
+        default: 'Alt+Shift+E',
+        mac: 'Option+Shift+E',
+      },
+      description: 'Toggle the editor for the most recent clip.',
+    },
   },
   background: {
     service_worker: 'src/service-worker/index.ts',

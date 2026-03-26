@@ -2,6 +2,7 @@ export const STORAGE_KEYS = {
   legacyClipSession: 'snapclip.clipSession',
   clipSessionIndex: 'snapclip.clipSessionIndex',
   lastLaunchError: 'snapclip.lastLaunchError',
+  lastCapturedClipId: 'snapclip.lastCapturedClipId',
   bridgeBaseUrl: 'snapclip.bridge.baseUrl',
   bridgeToken: 'snapclip.bridge.token',
 } as const;

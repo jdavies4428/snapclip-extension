@@ -71,6 +71,10 @@ async function getClipRecord(clipId: string): Promise<ClipRecord | null> {
   return clip ? clipRecordSchema.parse(clip) : null;
 }
 
+export async function getStoredClipRecord(clipId: string): Promise<ClipRecord | null> {
+  return getClipRecord(clipId);
+}
+
 async function getClipSessionIndex(): Promise<ClipSessionIndex | null> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.clipSessionIndex);
   const sessionIndex = result[STORAGE_KEYS.clipSessionIndex] as ClipSessionIndex | undefined;

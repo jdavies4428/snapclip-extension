@@ -1,15 +1,17 @@
 import type {
   ChromeDebuggerContext,
   ChromeDebuggerFrame,
+  ChromeDebuggerHeader,
   ChromeDebuggerLogEntry,
   ChromeDebuggerNetworkRequest,
 } from '../shared/types/session';
+import { formatDebuggerHeadersText, sanitizeDebuggerHeaders } from '../shared/export/evidence';
 
 const DEBUGGER_PROTOCOL_VERSIONS = ['1.3', '1.2', '1.1', '1.0', '0.1'] as const;
 const MAX_LOG_ENTRIES = 12;
-const MAX_NETWORK_ENTRIES = 12;
+const MAX_NETWORK_ENTRIES = 32;
 const MAX_FRAME_ENTRIES = 8;
-const OBSERVATION_WINDOW_MS = 150;
+const OBSERVATION_WINDOW_MS = 450;
 
 type DebuggerMetricName =
   | 'Documents'
@@ -31,6 +33,8 @@ function emptyDebuggerContext(fallback: { url: string; title: string }, error?: 
     capturedAt: new Date().toISOString(),
     attachError: error ?? null,
     detachReason: null,
+    observationWindowMs: OBSERVATION_WINDOW_MS,
+    networkEntryLimit: MAX_NETWORK_ENTRIES,
     currentUrl: fallback.url,
     currentTitle: fallback.title,
     frameCount: 0,
@@ -61,6 +65,48 @@ function wait(ms: number) {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, ms);
   });
+}
+
+function normalizeHeaders(headers: unknown): ChromeDebuggerHeader[] {
+  if (!headers || typeof headers !== 'object') {
+    return [];
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return [];
+      }
+
+      const candidate = entry as { name?: unknown; value?: unknown };
+      if (typeof candidate.name !== 'string') {
+        return [];
+      }
+
+      return [
+        {
+          name: candidate.name,
+          value: typeof candidate.value === 'string' ? candidate.value : String(candidate.value ?? ''),
+        },
+      ];
+    });
+  }
+
+  return Object.entries(headers as Record<string, unknown>).map(([name, value]) => ({
+    name,
+    value: typeof value === 'string' ? value : String(value ?? ''),
+  }));
+}
+
+function captureHeaders(headers: unknown) {
+  const sanitized = sanitizeDebuggerHeaders(normalizeHeaders(headers), 24, 180);
+
+  return {
+    headers: sanitized.headers,
+    headersText: formatDebuggerHeadersText(sanitized.headers),
+    hasHeaders: sanitized.headers.length > 0,
+    isTruncated: sanitized.isTruncated,
+  };
 }
 
 function readMetricValue(
@@ -179,6 +225,16 @@ export async function captureChromeDebuggerContext(
       blockedReason: existing?.blockedReason ?? null,
       fromDiskCache: existing?.fromDiskCache ?? false,
       fromServiceWorker: existing?.fromServiceWorker ?? false,
+      requestHeaders: existing?.requestHeaders ?? [],
+      responseHeaders: existing?.responseHeaders ?? [],
+      requestHeadersText: existing?.requestHeadersText ?? null,
+      responseHeadersText: existing?.responseHeadersText ?? null,
+      hasRequestHeaders: existing?.hasRequestHeaders ?? false,
+      hasResponseHeaders: existing?.hasResponseHeaders ?? false,
+      hasRequestBody: existing?.hasRequestBody ?? false,
+      hasResponseBody: existing?.hasResponseBody ?? false,
+      isTruncated: existing?.isTruncated ?? false,
+      statusText: existing?.statusText ?? null,
       timestamp: existing?.timestamp ?? null,
       ...existing,
       ...patch,
@@ -268,17 +324,52 @@ export async function captureChromeDebuggerContext(
       const entry = eventParams as
         | {
             requestId?: string;
-            request?: { url?: string; method?: string };
+            request?: {
+              url?: string;
+              method?: string;
+              headers?: unknown;
+              hasPostData?: boolean;
+              initialPriority?: string;
+            };
             type?: string;
           }
         | undefined;
       if (!entry?.requestId) {
         return;
       }
+      const requestHeaders = captureHeaders(entry.request?.headers);
       upsertNetwork(entry.requestId, {
         method: String(entry.request?.method || 'GET'),
         url: String(entry.request?.url || fallback.url),
         resourceType: entry.type ? String(entry.type) : null,
+        priority: entry.request?.initialPriority ? String(entry.request.initialPriority) : null,
+        requestHeaders: requestHeaders.headers,
+        requestHeadersText: requestHeaders.headersText,
+        hasRequestHeaders: requestHeaders.hasHeaders,
+        hasRequestBody: Boolean(entry.request?.hasPostData),
+        isTruncated: requestHeaders.isTruncated,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (method === 'Network.requestWillBeSentExtraInfo') {
+      const entry = eventParams as
+        | {
+            requestId?: string;
+            headers?: unknown;
+            headersText?: string;
+          }
+        | undefined;
+      if (!entry?.requestId) {
+        return;
+      }
+      const requestHeaders = captureHeaders(entry.headers);
+      upsertNetwork(entry.requestId, {
+        requestHeaders: requestHeaders.headers,
+        requestHeadersText: requestHeaders.headersText,
+        hasRequestHeaders: requestHeaders.hasHeaders,
+        isTruncated: Boolean(requestHeaders.isTruncated),
         timestamp: new Date().toISOString(),
       });
       return;
@@ -291,7 +382,9 @@ export async function captureChromeDebuggerContext(
             type?: string;
             response?: {
               status?: number;
+              statusText?: string;
               mimeType?: string;
+              headers?: unknown;
               fromDiskCache?: boolean;
               fromServiceWorker?: boolean;
             };
@@ -300,12 +393,42 @@ export async function captureChromeDebuggerContext(
       if (!entry?.requestId) {
         return;
       }
+      const responseHeaders = captureHeaders(entry.response?.headers);
       upsertNetwork(entry.requestId, {
         resourceType: entry.type ? String(entry.type) : null,
         status: typeof entry.response?.status === 'number' ? entry.response.status : null,
+        statusText: entry.response?.statusText ? String(entry.response.statusText) : null,
         mimeType: entry.response?.mimeType ? String(entry.response.mimeType) : null,
+        responseHeaders: responseHeaders.headers,
+        responseHeadersText: responseHeaders.headersText,
+        hasResponseHeaders: responseHeaders.hasHeaders,
+        isTruncated: Boolean(responseHeaders.isTruncated),
         fromDiskCache: Boolean(entry.response?.fromDiskCache),
         fromServiceWorker: Boolean(entry.response?.fromServiceWorker),
+      });
+      return;
+    }
+
+    if (method === 'Network.responseReceivedExtraInfo') {
+      const entry = eventParams as
+        | {
+            requestId?: string;
+            headers?: unknown;
+            headersText?: string;
+            statusCode?: number;
+          }
+        | undefined;
+      if (!entry?.requestId) {
+        return;
+      }
+      const responseHeaders = captureHeaders(entry.headers);
+      upsertNetwork(entry.requestId, {
+        responseHeaders: responseHeaders.headers,
+        responseHeadersText: responseHeaders.headersText,
+        hasResponseHeaders: responseHeaders.hasHeaders,
+        status: typeof entry.statusCode === 'number' ? entry.statusCode : undefined,
+        isTruncated: Boolean(responseHeaders.isTruncated),
+        timestamp: new Date().toISOString(),
       });
       return;
     }
@@ -431,6 +554,8 @@ export async function captureChromeDebuggerContext(
       capturedAt: new Date().toISOString(),
       attachError: null,
       detachReason,
+      observationWindowMs: OBSERVATION_WINDOW_MS,
+      networkEntryLimit: MAX_NETWORK_ENTRIES,
       currentUrl: String(currentEntry?.url || frames[0]?.url || fallback.url),
       currentTitle: String(currentEntry?.title || fallback.title),
       frameCount: frames.length,

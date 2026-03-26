@@ -1,5 +1,6 @@
 import { collectPageContext } from '../content-script';
-import type { ClipAnnotation, ClipMode, ClipRect, RuntimeContext } from '../shared/types/session';
+import { getClipAssetBlob } from '../shared/storage/blob-store';
+import type { ClipAnnotation, ClipMode, ClipRecord, ClipRect, RuntimeContext } from '../shared/types/session';
 import type { PageContext } from '../shared/types/snapshot';
 import { pageContextSchema } from '../shared/types/snapshot';
 import { captureChromeDebuggerContext } from './debugger';
@@ -13,11 +14,23 @@ import {
 } from './permissions';
 import { captureRuntimeContext, ensureRuntimeMonitor } from './runtime';
 
+type ExistingClipEditorState = {
+  clipId: string;
+  title: string;
+  note: string;
+  annotations: ClipAnnotation[];
+  crop: ClipRect;
+};
+
+type ClipLaunchMode = 'editor' | 'quick-copy' | 'saved-editor';
+
 function mountClipOverlay(
   clipMode: ClipMode,
   screenshotDataUrl: string,
   pageContext: PageContext,
   runtimeContext: RuntimeContext | null,
+  launchMode: ClipLaunchMode,
+  existingClip: ExistingClipEditorState | null,
 ) {
   const overlayId = 'snapclip-overlay-root';
   const cancelOverlayKey = '__llmClipCancelOverlay';
@@ -355,7 +368,7 @@ function mountClipOverlay(
   selection.style.background = 'rgba(103, 201, 255, 0.08)';
   selection.style.borderRadius = '12px';
   selection.style.pointerEvents = 'none';
-  selection.style.display = clipMode === 'visible' ? 'block' : 'none';
+  selection.style.display = clipMode === 'visible' && launchMode === 'editor' ? 'block' : 'none';
   selection.style.boxShadow = '0 18px 60px rgba(103, 201, 255, 0.14)';
   root.append(selection);
 
@@ -410,9 +423,15 @@ function mountClipOverlay(
   hint.style.fontWeight = '600';
   hint.style.zIndex = '2147483647';
   hint.textContent =
-    clipMode === 'visible'
-      ? 'Saving the visible tab...'
-      : 'Drag to select. Release to capture. Press Esc to cancel.';
+    launchMode === 'saved-editor'
+      ? 'Opening the saved clip editor...'
+      : clipMode === 'visible'
+      ? launchMode === 'quick-copy'
+        ? 'Copying the visible tab...'
+        : 'Preparing the visible tab editor...'
+      : launchMode === 'quick-copy'
+        ? 'Drag to select. Release to copy. Press Esc to cancel.'
+        : 'Drag to select. Release to capture. Press Esc to cancel.';
   root.append(hint);
 
   const cursorBubble = document.createElement('div');
@@ -655,6 +674,11 @@ function mountClipOverlay(
         return;
       }
 
+      if (launchMode === 'quick-copy') {
+        void completeQuickCopy(nextRect);
+        return;
+      }
+
       void openEditor(nextRect);
     });
   }
@@ -674,17 +698,105 @@ function mountClipOverlay(
   window.addEventListener('keydown', handleEscape, true);
   (window as typeof window & { [cancelOverlayKey]?: () => void })[cancelOverlayKey] = teardownOverlay;
 
-  const openEditor = async (rect: ClipRect) => {
+  const persistCapturedClip = async (params: {
+    rect: ClipRect;
+    clipDataUrl: string;
+    imageWidth: number;
+    imageHeight: number;
+    title: string;
+    note?: string;
+    annotations?: ClipAnnotation[];
+  }) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'commit-clip',
+      clipMode,
+      title: params.title,
+      note: params.note ?? '',
+      imageDataUrl: params.clipDataUrl,
+      imageWidth: params.imageWidth,
+      imageHeight: params.imageHeight,
+      crop: params.rect,
+      pageContext,
+      runtimeContext,
+      annotations: params.annotations ?? [],
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || 'Clip save failed.');
+    }
+  };
+
+  const completeQuickCopy = async (rect: ClipRect) => {
     if (isSaving) {
       return;
     }
 
     isSaving = true;
     phase = 'editing';
-      announce('Preparing your clip...');
+    announce(
+      clipMode === 'visible' ? 'Copying the visible tab...' : 'Copying the selected area...'
+    );
 
     try {
       const clipDataUrl = await cropImageDataUrl(rect);
+      const image = new Image();
+      image.src = clipDataUrl;
+      await image.decode();
+
+      const clipTitle = buildAutomaticClipTitle(pageContext.url);
+      const [copyResult, saveResult] = await Promise.allSettled([
+        copyImageToClipboard(clipDataUrl),
+        persistCapturedClip({
+          rect,
+          clipDataUrl,
+          imageWidth: image.naturalWidth,
+          imageHeight: image.naturalHeight,
+          title: clipTitle,
+        }),
+      ]);
+
+      const copied = copyResult.status === 'fulfilled';
+      const saved = saveResult.status === 'fulfilled';
+      const copyError = copyResult.status === 'rejected' ? copyResult.reason : null;
+      const saveError = saveResult.status === 'rejected' ? saveResult.reason : null;
+
+      if (copied && saved) {
+        announce('Image copied. Use the edit shortcut if you want to annotate.', 'success');
+      } else if (copied) {
+        console.warn('LLM Clip quick-copy save failed after clipboard success.', saveError);
+        announce('Image copied. LLM Clip could not save the local draft for editing later.', 'error');
+      } else if (saved) {
+        console.warn('LLM Clip quick-copy clipboard copy failed; clip saved locally.', copyError);
+        announce('Clip saved locally, but clipboard copy was unavailable. Use the edit shortcut or side panel.', 'error');
+      } else {
+        throw copyError instanceof Error ? copyError : new Error('Clipboard copy failed.');
+      }
+
+      window.setTimeout(() => {
+        handleEditorEscape = null;
+        teardownOverlay();
+      }, copied ? 350 : 900);
+    } catch (error) {
+      announce(
+        error instanceof Error ? error.message : 'Quick copy failed.',
+        'error',
+      );
+      isSaving = false;
+      phase = clipMode === 'region' ? 'select' : 'editing';
+    }
+  };
+
+  const openEditor = async (rect: ClipRect, initialClip: ExistingClipEditorState | null = null) => {
+    if (isSaving) {
+      return;
+    }
+
+    isSaving = true;
+    phase = 'editing';
+    announce(initialClip ? 'Opening the saved clip editor...' : 'Preparing your clip...');
+
+    try {
+      const clipDataUrl = initialClip ? screenshotDataUrl : await cropImageDataUrl(rect);
       const image = new Image();
       image.src = clipDataUrl;
       await image.decode();
@@ -779,7 +891,7 @@ function mountClipOverlay(
       titleControls.style.alignItems = 'center';
       titleControls.style.gap = '10px';
 
-      const clipTitle = buildAutomaticClipTitle(pageContext.url);
+      const clipTitle = initialClip?.title?.trim() || buildAutomaticClipTitle(pageContext.url);
 
       const titleSub = document.createElement('p');
       titleSub.textContent = pageContext.title || 'Captured clip';
@@ -829,6 +941,7 @@ function mountClipOverlay(
       noteField.style.lineHeight = '1.5';
       noteField.style.display = 'block';
       noteField.setAttribute('aria-label', 'Clip instructions');
+      noteField.value = initialClip?.note ?? '';
       noteCard.append(noteField);
 
       const actionRow = document.createElement('div');
@@ -1294,7 +1407,14 @@ function mountClipOverlay(
                 ...(chromeDebugger.network.length
                   ? chromeDebugger.network.map((entry) => {
                       const status = entry.status === null || typeof entry.status === 'undefined' ? 'ERR' : String(entry.status);
-                      const extra = [entry.resourceType, entry.mimeType, entry.failedReason, entry.blockedReason]
+                      const extra = [
+                        entry.resourceType,
+                        entry.mimeType,
+                        entry.failedReason,
+                        entry.blockedReason,
+                        entry.hasRequestHeaders ? `${entry.requestHeaders?.length ?? 0} req headers` : '',
+                        entry.hasResponseHeaders ? `${entry.responseHeaders?.length ?? 0} res headers` : '',
+                      ]
                         .filter(Boolean)
                         .join(' • ');
                       return `- ${entry.method} ${status} ${entry.url}${extra ? ` • ${extra}` : ''}`;
@@ -1867,7 +1987,7 @@ function mountClipOverlay(
         | { kind: 'box'; x: number; y: number; width: number; height: number }
         | { kind: 'arrow'; startX: number; startY: number; endX: number; endY: number }
         | null = null;
-      let annotations: ClipAnnotation[] = [];
+      let annotations: ClipAnnotation[] = (initialClip?.annotations ?? []).map((annotation) => ({ ...annotation }));
       let selectedAnnotationId: string | null = null;
 
       const annotationColor = '#ff8a5b';
@@ -2698,6 +2818,17 @@ function mountClipOverlay(
         actionStatus.style.color = '#dbe8f8';
       };
 
+      const autoCopyClipImage = async () => {
+        try {
+          await copyImageToClipboard(clipDataUrl);
+          setActionStatus('Image copied to clipboard. You can paste it right away.', 'success');
+          announce('Image copied to your clipboard.', 'success');
+        } catch (error) {
+          console.warn('LLM Clip auto-copy failed; continuing without clipboard image.', error);
+          setActionStatus('Clip ready. Clipboard copy was unavailable here. Use Copy image if needed.');
+        }
+      };
+
       const renderSelectionHint = () => {
         const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) ?? null;
 
@@ -2860,6 +2991,9 @@ function mountClipOverlay(
       syncActiveTool();
       syncRailMode();
       setActionStatus('Box tool selected. Drag on the capture, or click an existing annotation to adjust it.');
+      if (!initialClip) {
+        void autoCopyClipImage();
+      }
 
       stage.addEventListener('dblclick', (event) => {
         const target = event.target as HTMLElement;
@@ -3075,22 +3209,39 @@ function mountClipOverlay(
           try {
             saveButton.disabled = true;
             saveButton.textContent = 'Saving...';
-            setActionStatus('Saving clip...');
-            const response = await chrome.runtime.sendMessage({
-              type: 'commit-clip',
-              clipMode,
-              title: clipTitle,
-              note: noteField.value,
-              imageDataUrl: clipDataUrl,
-              imageWidth: image.naturalWidth,
-              imageHeight: image.naturalHeight,
-              crop: rect,
-              pageContext,
-              runtimeContext,
-              annotations,
-            });
-            if (!response?.ok) {
-              throw new Error(response?.error || 'Clip save failed.');
+            setActionStatus(initialClip ? 'Saving changes...' : 'Saving clip...');
+
+            if (initialClip) {
+              const [noteResponse, annotationsResponse] = await Promise.all([
+                chrome.runtime.sendMessage({
+                  type: 'update-clip-note',
+                  clipId: initialClip.clipId,
+                  note: noteField.value,
+                }),
+                chrome.runtime.sendMessage({
+                  type: 'update-clip-annotations',
+                  clipId: initialClip.clipId,
+                  annotations,
+                }),
+              ]);
+
+              if (!noteResponse?.ok) {
+                throw new Error(noteResponse?.error || 'Clip note save failed.');
+              }
+
+              if (!annotationsResponse?.ok) {
+                throw new Error(annotationsResponse?.error || 'Clip annotation save failed.');
+              }
+            } else {
+              await persistCapturedClip({
+                rect,
+                clipDataUrl,
+                imageWidth: image.naturalWidth,
+                imageHeight: image.naturalHeight,
+                title: clipTitle,
+                note: noteField.value,
+                annotations,
+              });
             }
 
             try {
@@ -3120,16 +3271,28 @@ function mountClipOverlay(
     }
   };
 
+  document.documentElement.append(root);
+
+  if (launchMode === 'saved-editor' && existingClip) {
+    void openEditor(existingClip.crop, existingClip);
+    return;
+  }
+
   if (clipMode === 'visible') {
-    void openEditor({
+    const fullRect = {
       x: 0,
       y: 0,
       width: window.innerWidth,
       height: window.innerHeight,
-    });
-  }
+    };
 
-  document.documentElement.append(root);
+    if (launchMode === 'quick-copy') {
+      void completeQuickCopy(fullRect);
+      return;
+    }
+
+    void openEditor(fullRect);
+  }
 }
 
 function cancelMountedClipOverlay() {
@@ -3143,6 +3306,7 @@ export async function startClipWorkflow(
     tabId?: number;
     windowId?: number;
     interactive?: boolean;
+    launchMode?: ClipLaunchMode;
   },
 ): Promise<void> {
   const tab =
@@ -3253,7 +3417,101 @@ export async function startClipWorkflow(
   await chrome.scripting.executeScript({
     target: { tabId },
     func: mountClipOverlay,
-    args: [clipMode, screenshotDataUrl, pageContext, runtimeContext],
+    args: [clipMode, screenshotDataUrl, pageContext, runtimeContext, options?.launchMode ?? 'editor', null],
+  });
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+
+  return `data:${blob.type || 'image/png'};base64,${btoa(binary)}`;
+}
+
+async function ensureTabOverlayAccess(
+  tab: chrome.tabs.Tab & { id: number },
+  interactive: boolean,
+): Promise<void> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => true,
+    });
+    return;
+  } catch (error) {
+    if (!isHostAccessError(error)) {
+      throw error;
+    }
+  }
+
+  const accessResult = await requestTabHostAccess(tab, { interactive });
+  const hostLabel = getUrlHostLabel(tab.url);
+
+  if (accessResult === 'granted') {
+    return;
+  }
+
+  if (accessResult === 'requested') {
+    throw new Error(
+      `LLM Clip needs access to ${hostLabel} before it can reopen this clip. Chrome should show a site access request in the tab. Approve it, then try again.`,
+    );
+  }
+
+  throw new Error(
+    `LLM Clip needs access to ${hostLabel} before it can reopen this clip. Grant site access and try again.`,
+  );
+}
+
+export async function openSavedClipEditor(
+  clip: ClipRecord,
+  options?: {
+    tabId?: number;
+    interactive?: boolean;
+  },
+): Promise<void> {
+  const tab =
+    typeof options?.tabId === 'number' ? await getSupportedTabById(options.tabId) : await getSupportedActiveTab();
+  const imageBlob = await getClipAssetBlob(clip.imageAssetId);
+  if (!imageBlob) {
+    throw new Error('LLM Clip could not load the saved clip image.');
+  }
+
+  await ensureTabOverlayAccess(tab, options?.interactive ?? true);
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: cancelMountedClipOverlay,
+    });
+  } catch {
+    // Ignore if there was no mounted overlay or the page was in-between states.
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: mountClipOverlay,
+    args: [
+      clip.clipMode,
+      await blobToDataUrl(imageBlob),
+      {
+        ...clip.page,
+        domSummary: clip.domSummary,
+      },
+      clip.runtimeContext,
+      'saved-editor',
+      {
+        clipId: clip.id,
+        title: clip.title,
+        note: clip.note,
+        annotations: clip.annotations,
+        crop: clip.crop,
+      },
+    ],
   });
 }
 

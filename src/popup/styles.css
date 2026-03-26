@@ -264,6 +264,13 @@ button:focus-visible {
   font-weight: 600;
 }
 
+.shortcut-chip-warning {
+  border: 1px solid rgba(255, 184, 82, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 184, 82, 0.08), rgba(255, 184, 82, 0.03)),
+    rgba(255, 255, 255, 0.05);
+}
+
 .shortcut-chip kbd {
   padding: 6px 8px;
   border-radius: 10px;

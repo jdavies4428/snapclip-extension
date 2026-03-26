@@ -1,5 +1,6 @@
 import { createDownloadFilename } from '../shared/export/file';
 import { createClipSessionMarkdown } from '../shared/export/session-markdown';
+import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { putClipAsset } from '../shared/storage/blob-store';
 import type { ClipMode, ClipSession, RuntimeContext } from '../shared/types/session';
 import { clipRecordSchema } from '../shared/types/session';
@@ -58,7 +59,12 @@ export async function commitClipToSession(params: {
     annotations: params.annotations ?? [],
   });
 
-  return appendClipToSession(clip);
+  const nextSession = await appendClipToSession(clip);
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.lastCapturedClipId]: clip.id,
+  });
+
+  return nextSession;
 }
 
 export async function exportClipSession(session: ClipSession, format: 'json' | 'markdown'): Promise<void> {

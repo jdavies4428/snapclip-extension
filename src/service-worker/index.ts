@@ -1,8 +1,9 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
-import { startClipWorkflow } from './clipping';
+import { openSavedClipEditor, startClipWorkflow } from './clipping';
 import { getSupportedActiveTab } from './permissions';
 import { routeMessage } from './router';
+import { getClipSession, getStoredClipRecord } from './storage';
 
 function normalizeLaunchError(error: unknown): string {
   const message = error instanceof Error ? error.message : 'Failed to start clipping.';
@@ -28,16 +29,67 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((error) => console.error('Failed to set side panel behavior', error));
 });
 
+async function openSidePanelForLastFocusedWindow() {
+  const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
+  const targetTab =
+    tabs.find((tab) => typeof tab.windowId === 'number' && tab.active) ??
+    tabs.find((tab) => typeof tab.windowId === 'number');
+
+  if (typeof targetTab?.windowId !== 'number') {
+    throw new Error('No active browser window was found.');
+  }
+
+  await chrome.sidePanel.open({ windowId: targetTab.windowId });
+}
+
+async function openLastCapturedClipEditor() {
+  const result = await chrome.storage.local.get([
+    STORAGE_KEYS.lastCapturedClipId,
+  ]);
+  let clipId = result[STORAGE_KEYS.lastCapturedClipId];
+
+  if (typeof clipId !== 'string' || !clipId.trim()) {
+    const session = await getClipSession();
+    clipId = session?.activeClipId ?? session?.clips.at(-1)?.id ?? '';
+
+    if (clipId) {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.lastCapturedClipId]: clipId,
+      });
+    }
+  }
+
+  if (typeof clipId !== 'string' || !clipId.trim()) {
+    throw new Error('Capture a clip first, then use the edit shortcut.');
+  }
+
+  const clip = await getStoredClipRecord(clipId);
+  if (!clip) {
+    throw new Error('The latest saved clip is no longer available.');
+  }
+
+  await openSavedClipEditor(clip, {
+    interactive: true,
+  });
+}
+
 chrome.commands.onCommand.addListener(async (command) => {
   try {
-    const tab = await getSupportedActiveTab();
     await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
+
+    if (command === 'open-last-clip-editor') {
+      await openLastCapturedClipEditor();
+      return;
+    }
+
+    const tab = await getSupportedActiveTab();
 
     if (command === 'start-region-clip') {
       await startClipWorkflow('region', {
         tabId: tab.id,
         windowId: tab.windowId,
         interactive: true,
+        launchMode: 'quick-copy',
       });
     }
 
@@ -46,6 +98,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         tabId: tab.id,
         windowId: tab.windowId,
         interactive: true,
+        launchMode: 'quick-copy',
       });
     }
   } catch (error) {
@@ -55,8 +108,7 @@ chrome.commands.onCommand.addListener(async (command) => {
       [STORAGE_KEYS.lastLaunchError]: errorMessage,
     });
     try {
-      const tab = await getSupportedActiveTab();
-      await chrome.sidePanel.open({ windowId: tab.windowId });
+      await openSidePanelForLastFocusedWindow();
     } catch {
       // Ignore if the side panel cannot be opened here.
     }
