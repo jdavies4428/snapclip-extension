@@ -1590,7 +1590,7 @@ function mountClipOverlay(
 
       type InsightTone = 'default' | 'error' | 'warn';
       type InsightRow = { label: string; value: string; tone?: InsightTone };
-      type DebugInspectorTab = 'info' | 'console' | 'network' | 'actions' | 'ai';
+      type DebugInspectorTab = 'info' | 'console' | 'network' | 'actions';
 
       const overviewStrip = document.createElement('div');
       overviewStrip.style.display = 'grid';
@@ -1782,21 +1782,6 @@ function mountClipOverlay(
         makeKeyValueRow('Snapshot', chromeDebugger?.attachError ? 'Runtime only' : 'Runtime + debugger'),
       );
       debugPreviewCard.append(previewBrowserFrame, previewMeta);
-
-      const promptSummaryCard = makeSectionCard('Agent prompt', 'This prompt stays attached to the clip.');
-      const promptSummaryBody = document.createElement('div');
-      promptSummaryBody.textContent =
-        noteField.value.trim() || 'No prompt yet. Add one when you go back to the editor.';
-      promptSummaryBody.style.padding = '14px';
-      promptSummaryBody.style.borderRadius = '16px';
-      promptSummaryBody.style.border = '1px solid rgba(103, 209, 255, 0.18)';
-      promptSummaryBody.style.background = 'rgba(255, 255, 255, 0.035)';
-      promptSummaryBody.style.color = noteField.value.trim() ? '#eef4fb' : '#9db2cf';
-      promptSummaryBody.style.fontSize = '14px';
-      promptSummaryBody.style.lineHeight = '1.6';
-      promptSummaryBody.style.whiteSpace = 'pre-wrap';
-
-      promptSummaryCard.append(promptSummaryBody);
 
       const infoSummaryCard = makeSectionCard('Environment', 'Saved with the packet.');
       const infoMetaGrid = document.createElement('div');
@@ -2061,7 +2046,6 @@ function mountClipOverlay(
         { key: 'console', label: 'Console' },
         { key: 'network', label: 'Network' },
         { key: 'actions', label: 'Actions' },
-        { key: 'ai', label: 'AI' },
       ];
       let activeDebugTab: DebugInspectorTab = 'network';
 
@@ -2075,8 +2059,6 @@ function mountClipOverlay(
             return [networkFocusCard, chromeNetworkCard, runtimeNetworkCard];
           case 'actions':
             return [actionTimelineCard];
-          case 'ai':
-            return [promptSummaryCard];
         }
       };
 
@@ -2159,18 +2141,6 @@ function mountClipOverlay(
       contentGrid.append(mainColumn, sideRail, debugWorkspace);
       editor.append(scrollbarStyle, closeButton, contentGrid);
       root.append(editor, cursorBubble);
-
-      const syncDebugWorkspace = () => {
-        const promptText = noteField.value.trim();
-        promptSummaryBody.textContent = promptText || 'No prompt yet. Add one when you go back to the editor.';
-        promptSummaryBody.style.color = promptText ? '#eef4fb' : '#9db2cf';
-        if (activeDebugTab === 'ai') {
-          renderDebugTab();
-        }
-      };
-
-      noteField.addEventListener('input', syncDebugWorkspace);
-      syncDebugWorkspace();
 
       window.setTimeout(() => {
         noteField.focus();
