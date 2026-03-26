@@ -13,6 +13,8 @@ import {
   type BridgeSession,
   type BridgeWorkspace,
 } from '../../shared/bridge/client';
+import { pickSessionId, pickWorkspaceId } from '../../shared/bridge/selection';
+import { STORAGE_KEYS } from '../../shared/snapshot/storage';
 
 function toBridgeErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -20,23 +22,6 @@ function toBridgeErrorMessage(error: unknown) {
   }
 
   return 'LLM Clip could not reach the local handoff bridge.';
-}
-
-function pickWorkspaceId(workspaces: BridgeWorkspace[], currentValue: string): string {
-  if (currentValue && workspaces.some((workspace) => workspace.id === currentValue)) {
-    return currentValue;
-  }
-
-  const withSessions = workspaces.find((workspace) => workspace.sessionCount > 0);
-  return withSessions?.id ?? workspaces[0]?.id ?? '';
-}
-
-function pickSessionId(sessions: BridgeSession[], currentValue: string): string {
-  if (currentValue && sessions.some((session) => session.id === currentValue)) {
-    return currentValue;
-  }
-
-  return sessions.length === 1 ? sessions[0]?.id ?? '' : '';
 }
 
 export function useBridgeState(options: {
@@ -58,6 +43,18 @@ export function useBridgeState(options: {
   const [isHookInstalling, setIsHookInstalling] = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [hasHydratedBridgeSelection, setHasHydratedBridgeSelection] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !hasHydratedBridgeSelection) {
+      return;
+    }
+
+    void chrome.storage.local.set({
+      [STORAGE_KEYS.bridgeSelectedWorkspaceId]: selectedWorkspaceId,
+      [STORAGE_KEYS.bridgeSelectedSessionId]: selectedSessionId,
+    });
+  }, [enabled, hasHydratedBridgeSelection, selectedSessionId, selectedWorkspaceId]);
 
   useEffect(() => {
     if (enabled) {
@@ -76,6 +73,7 @@ export function useBridgeState(options: {
     setIsHookInstalling(false);
     setSelectedWorkspaceId('');
     setSelectedSessionId('');
+    setHasHydratedBridgeSelection(false);
   }, [enabled]);
 
   useEffect(() => {
@@ -89,7 +87,13 @@ export function useBridgeState(options: {
       setIsBridgeLoading(true);
 
       try {
-        const config = await getBridgeConfig();
+        const [config, persistedSelection] = await Promise.all([
+          getBridgeConfig(),
+          chrome.storage.local.get([
+            STORAGE_KEYS.bridgeSelectedWorkspaceId,
+            STORAGE_KEYS.bridgeSelectedSessionId,
+          ]),
+        ]);
         if (cancelled) {
           return;
         }
@@ -109,7 +113,17 @@ export function useBridgeState(options: {
         setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
         setHookSettingsPath(hookConfig?.settingsPath ?? '');
         setHookInstalledEvents(hookConfig?.installedEvents ?? []);
-        setSelectedWorkspaceId((currentValue) => pickWorkspaceId(workspaces, currentValue));
+        const persistedWorkspaceId =
+          typeof persistedSelection[STORAGE_KEYS.bridgeSelectedWorkspaceId] === 'string'
+            ? persistedSelection[STORAGE_KEYS.bridgeSelectedWorkspaceId]
+            : '';
+        const persistedSessionId =
+          typeof persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId] === 'string'
+            ? persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId]
+            : '';
+        setSelectedWorkspaceId((currentValue) => pickWorkspaceId(workspaces, currentValue || persistedWorkspaceId));
+        setSelectedSessionId((currentValue) => currentValue || persistedSessionId);
+        setHasHydratedBridgeSelection(true);
       } catch (error) {
         if (!cancelled) {
           setBridgeError(toBridgeErrorMessage(error));
@@ -118,6 +132,7 @@ export function useBridgeState(options: {
           setBridgeApprovals([]);
           setSelectedWorkspaceId('');
           setSelectedSessionId('');
+          setHasHydratedBridgeSelection(true);
         }
       } finally {
         if (!cancelled) {
@@ -235,7 +250,21 @@ export function useBridgeState(options: {
     setBridgeError(workspaces.length ? '' : 'The local LLM Clip bridge returned no workspaces.');
     setHookSettingsPath(hookConfig?.settingsPath ?? '');
     setHookInstalledEvents(hookConfig?.installedEvents ?? []);
-    setSelectedWorkspaceId((currentValue) => pickWorkspaceId(workspaces, currentValue));
+    const persistedSelection = await chrome.storage.local.get([
+      STORAGE_KEYS.bridgeSelectedWorkspaceId,
+      STORAGE_KEYS.bridgeSelectedSessionId,
+    ]);
+    const persistedWorkspaceId =
+      typeof persistedSelection[STORAGE_KEYS.bridgeSelectedWorkspaceId] === 'string'
+        ? persistedSelection[STORAGE_KEYS.bridgeSelectedWorkspaceId]
+        : '';
+    const persistedSessionId =
+      typeof persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId] === 'string'
+        ? persistedSelection[STORAGE_KEYS.bridgeSelectedSessionId]
+        : '';
+    setSelectedWorkspaceId((currentValue) => pickWorkspaceId(workspaces, currentValue || persistedWorkspaceId));
+    setSelectedSessionId((currentValue) => currentValue || persistedSessionId);
+    setHasHydratedBridgeSelection(true);
 
     return nextConfig;
   }

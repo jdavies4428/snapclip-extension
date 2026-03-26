@@ -1,4 +1,7 @@
+import type { HandoffIntent, BridgeSession, BridgeTask, BridgeWorkspace } from '../bridge/client';
+import type { EvidenceProfile } from '../export/evidence';
 import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
+import type { HandoffScope } from '../ai/prompts';
 import type { PageContext } from '../types/snapshot';
 
 export type OpenSidePanelMessage = {
@@ -33,6 +36,40 @@ export type CommitClipMessage = {
 
 export type GetClipSessionMessage = {
   type: 'get-clip-session';
+};
+
+export type GetBridgeWorkspacesMessage = {
+  type: 'get-bridge-workspaces';
+};
+
+export type GetBridgeSessionsMessage = {
+  type: 'get-bridge-sessions';
+  workspaceId: string;
+};
+
+export type SendBridgeClaudeSessionMessage = {
+  type: 'send-bridge-claude-session';
+  workspaceId: string;
+  sessionId: string;
+  clipId?: string;
+  draftTitle?: string;
+  draftNote?: string;
+  draftAnnotations?: ClipAnnotation[];
+  intent?: HandoffIntent;
+  scope?: HandoffScope;
+  evidenceProfile?: EvidenceProfile;
+  newClip?: {
+    clipMode: ClipMode;
+    title?: string;
+    note?: string;
+    imageDataUrl: string;
+    imageWidth: number;
+    imageHeight: number;
+    crop: ClipRect;
+    pageContext: PageContext;
+    runtimeContext: RuntimeContext | null;
+    annotations?: ClipAnnotation[];
+  };
 };
 
 export type UpdateClipNoteMessage = {
@@ -91,6 +128,9 @@ export type SnapClipMessage =
   | OpenClipEditorMessage
   | CommitClipMessage
   | GetClipSessionMessage
+  | GetBridgeWorkspacesMessage
+  | GetBridgeSessionsMessage
+  | SendBridgeClaudeSessionMessage
   | UpdateClipTitleMessage
   | UpdateClipNoteMessage
   | UpdateClipAnnotationsMessage
@@ -102,5 +142,5 @@ export type SnapClipMessage =
   | CancelClipOverlayMessage;
 
 export type SnapClipMessageResponse =
-  | { ok: true; session?: ClipSession }
+  | { ok: true; session?: ClipSession; workspaces?: BridgeWorkspace[]; sessions?: BridgeSession[]; task?: BridgeTask }
   | { ok: false; error: string };

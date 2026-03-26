@@ -279,6 +279,43 @@ export async function updateClipAnnotations(clipId: string, annotations: ClipAnn
   });
 }
 
+export async function updateClipDraft(
+  clipId: string,
+  updates: {
+    title?: string;
+    note?: string;
+    annotations?: ClipAnnotation[];
+  },
+): Promise<ClipSession> {
+  const session = await ensureClipSession();
+  const targetClip = session.clips.find((clip) => clip.id === clipId);
+  if (!targetClip) {
+    return session;
+  }
+
+  const updatedAt = new Date().toISOString();
+  const updatedClip = clipRecordSchema.parse({
+    ...targetClip,
+    ...(typeof updates.title === 'string' ? { title: updates.title.trim() || targetClip.title } : {}),
+    ...(typeof updates.note === 'string' ? { note: updates.note } : {}),
+    ...(updates.annotations ? { annotations: updates.annotations } : {}),
+  });
+  await saveClipRecord(updatedClip);
+  await saveClipSessionIndex({
+    id: session.id,
+    createdAt: session.createdAt,
+    updatedAt,
+    activeClipId: session.activeClipId,
+    clipIds: session.clips.map((clip) => clip.id),
+  });
+
+  return clipSessionSchema.parse({
+    ...session,
+    updatedAt,
+    clips: session.clips.map((clip) => (clip.id === clipId ? updatedClip : clip)),
+  });
+}
+
 export async function updateClipHandoff(clipId: string, handoff: ClipHandoffRecord): Promise<ClipSession> {
   const session = await ensureClipSession();
   const targetClip = session.clips.find((clip) => clip.id === clipId);

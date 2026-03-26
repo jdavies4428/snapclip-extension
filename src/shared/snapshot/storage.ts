@@ -5,6 +5,8 @@ export const STORAGE_KEYS = {
   lastCapturedClipId: 'snapclip.lastCapturedClipId',
   bridgeBaseUrl: 'snapclip.bridge.baseUrl',
   bridgeToken: 'snapclip.bridge.token',
+  bridgeSelectedWorkspaceId: 'snapclip.bridge.selectedWorkspaceId',
+  bridgeSelectedSessionId: 'snapclip.bridge.selectedSessionId',
 } as const;
 
 export function getClipStorageKey(clipId: string): string {

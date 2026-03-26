@@ -34,9 +34,29 @@ function mountClipOverlay(
 ) {
   const overlayId = 'snapclip-overlay-root';
   const cancelOverlayKey = '__llmClipCancelOverlay';
+  const bridgeSelectedWorkspaceStorageKey = 'snapclip.bridge.selectedWorkspaceId';
+  const bridgeSelectedSessionStorageKey = 'snapclip.bridge.selectedSessionId';
 
   const clamp = (value: number, min: number, max: number) =>
     Math.min(Math.max(value, min), max);
+  const pickWorkspaceId = (
+    workspaces: Array<{ id: string; sessionCount?: number }>,
+    currentValue: string,
+  ) => {
+    if (currentValue && workspaces.some((workspace) => workspace.id === currentValue)) {
+      return currentValue;
+    }
+
+    const withSessions = workspaces.find((workspace) => (workspace.sessionCount ?? 0) > 0);
+    return withSessions?.id ?? workspaces[0]?.id ?? '';
+  };
+  const pickSessionId = (sessions: Array<{ id: string }>, currentValue: string) => {
+    if (currentValue && sessions.some((session) => session.id === currentValue)) {
+      return currentValue;
+    }
+
+    return sessions.length === 1 ? sessions[0]?.id ?? '' : '';
+  };
 
   const removeOverlay = () => {
     document.getElementById(overlayId)?.remove();
@@ -810,10 +830,10 @@ function mountClipOverlay(
       editor.style.left = '50%';
       editor.style.top = '50%';
       editor.style.transform = 'translate(-50%, -50%)';
-      editor.style.width = 'min(92vw, 1500px)';
-      editor.style.height = '88vh';
-      editor.style.maxWidth = '92vw';
-      editor.style.maxHeight = '88vh';
+      editor.style.width = 'min(96vw, 1720px)';
+      editor.style.height = '94vh';
+      editor.style.maxWidth = '96vw';
+      editor.style.maxHeight = '94vh';
       editor.style.overflow = 'hidden';
       editor.style.boxSizing = 'border-box';
       editor.style.padding = '20px';
@@ -892,6 +912,12 @@ function mountClipOverlay(
       titleControls.style.gap = '10px';
 
       const clipTitle = initialClip?.title?.trim() || buildAutomaticClipTitle(pageContext.url);
+      let currentClip = initialClip
+        ? {
+            ...initialClip,
+            annotations: initialClip.annotations.map((annotation) => ({ ...annotation })),
+          }
+        : null;
 
       const titleSub = document.createElement('p');
       titleSub.textContent = pageContext.title || 'Captured clip';
@@ -941,8 +967,17 @@ function mountClipOverlay(
       noteField.style.lineHeight = '1.5';
       noteField.style.display = 'block';
       noteField.setAttribute('aria-label', 'Clip instructions');
-      noteField.value = initialClip?.note ?? '';
-      noteCard.append(noteField);
+      noteField.value = currentClip?.note ?? '';
+
+      const claudeRailStrip = document.createElement('div');
+      claudeRailStrip.style.display = 'grid';
+      claudeRailStrip.style.gap = '10px';
+      claudeRailStrip.style.padding = '12px';
+      claudeRailStrip.style.borderRadius = '18px';
+      claudeRailStrip.style.background = 'rgba(6, 12, 22, 0.76)';
+      claudeRailStrip.style.border = '1px solid rgba(103, 209, 255, 0.18)';
+
+      noteCard.append(noteLabel, noteHelp, noteField, claudeRailStrip);
 
       const actionRow = document.createElement('div');
       actionRow.style.display = 'grid';
@@ -984,7 +1019,7 @@ function mountClipOverlay(
       const copySummaryButton = document.createElement('button');
       copySummaryButton.textContent = 'Copy packet';
       const saveButton = document.createElement('button');
-      saveButton.textContent = 'Save to session';
+      saveButton.textContent = currentClip ? 'Save changes' : 'Save clip';
       const cancelButton = document.createElement('button');
       cancelButton.textContent = 'Discard';
       const detailsButton = document.createElement('button');
@@ -1072,6 +1107,7 @@ function mountClipOverlay(
       copyButton.title = 'Copy the clipped screenshot only.';
       copyInstructionsButton.title = 'Copy just the prompt you wrote for the LLM.';
       copySummaryButton.title = 'Copy the clipped image plus the packet text with prompt and context.';
+      detailsButton.title = 'Open the debug inspector for this clip.';
 
       const hoverButtons: Array<[HTMLButtonElement, string]> = [
         [toolTextButton, 'Add a text note. Double-click an existing text note to edit it.'],
@@ -1080,9 +1116,8 @@ function mountClipOverlay(
         [copyButton, 'Copy the clipped screenshot only.'],
         [copyInstructionsButton, 'Copy just your LLM prompt from this clip.'],
         [copySummaryButton, 'Copy the clipped image plus the packet text: prompt, page info, and recent issues.'],
-        [saveButton, 'Save this clip to the session gallery.'],
+        [saveButton, 'Save this clip locally so it stays in your session gallery.'],
         [cancelButton, 'Close this clip without saving it.'],
-        [detailsButton, 'Open the debug inspector for this clip, including console, network, DOM, and system details.'],
       ];
 
       hoverButtons.forEach(([button, text]) => {
@@ -1150,7 +1185,7 @@ function mountClipOverlay(
 
       const contentGrid = document.createElement('div');
       contentGrid.style.display = 'grid';
-      contentGrid.style.gridTemplateColumns = 'minmax(0, 1fr) minmax(380px, 420px)';
+      contentGrid.style.gridTemplateColumns = 'minmax(0, 1fr) minmax(420px, 480px)';
       contentGrid.style.gap = '18px';
       contentGrid.style.minHeight = '0';
       contentGrid.style.height = '100%';
@@ -1179,7 +1214,7 @@ function mountClipOverlay(
       const debugWorkspace = document.createElement('section');
       debugWorkspace.dataset.snapclipScroll = 'hidden';
       debugWorkspace.style.display = 'none';
-      debugWorkspace.style.gridAutoRows = 'max-content';
+      debugWorkspace.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
       debugWorkspace.style.alignContent = 'start';
       debugWorkspace.style.gap = '14px';
       debugWorkspace.style.minHeight = '0';
@@ -1198,6 +1233,10 @@ function mountClipOverlay(
       const detailsTitleBlock = document.createElement('div');
       detailsTitleBlock.style.display = 'grid';
       detailsTitleBlock.style.gap = '4px';
+
+      const detailsHeaderStack = document.createElement('div');
+      detailsHeaderStack.style.display = 'grid';
+      detailsHeaderStack.style.gap = '12px';
 
       const detailsEyebrow = document.createElement('div');
       detailsEyebrow.textContent = 'DEBUG INFO';
@@ -1249,9 +1288,18 @@ function mountClipOverlay(
       detailsBackButton.style.background = 'rgba(255,255,255,0.08)';
       detailsBackButton.style.color = '#edf3fb';
 
+      const claudeDebugStrip = document.createElement('div');
+      claudeDebugStrip.style.display = 'grid';
+      claudeDebugStrip.style.gap = '10px';
+      claudeDebugStrip.style.padding = '12px 14px';
+      claudeDebugStrip.style.borderRadius = '16px';
+      claudeDebugStrip.style.background = 'rgba(255, 255, 255, 0.04)';
+      claudeDebugStrip.style.border = '1px solid rgba(103, 209, 255, 0.16)';
+
       detailsTitleBlock.append(detailsEyebrow, detailsTitle, detailsLead);
+      detailsHeaderStack.append(detailsTitleBlock, claudeDebugStrip);
       detailsActions.append(copyDebugButton, detailsBackButton);
-      detailsHead.append(detailsTitleBlock, detailsActions);
+      detailsHead.append(detailsHeaderStack, detailsActions);
 
       const stage = document.createElement('div');
       stage.style.position = 'relative';
@@ -2818,6 +2866,491 @@ function mountClipOverlay(
         actionStatus.style.color = '#dbe8f8';
       };
 
+      type OverlayBridgeWorkspace = {
+        id: string;
+        name: string;
+        sessionCount: number;
+      };
+
+      type OverlayBridgeSession = {
+        id: string;
+        label: string;
+        pendingApprovalCount?: number;
+      };
+
+      const claudeSessionSurfaces: Array<{
+        mode: 'rail' | 'debug';
+        root: HTMLDivElement;
+      }> = [
+        { mode: 'rail', root: claudeRailStrip },
+        { mode: 'debug', root: claudeDebugStrip },
+      ];
+      let bridgeWorkspaces: OverlayBridgeWorkspace[] = [];
+      let bridgeSessions: OverlayBridgeSession[] = [];
+      let selectedWorkspaceId = '';
+      let selectedClaudeSessionId = '';
+      let bridgeStatusMessage = '';
+      let bridgeStatusTone: 'default' | 'success' | 'error' = 'default';
+      let isBridgeLoading = false;
+      let isBridgeSending = false;
+      let activeClaudeSessionId = '';
+      let successfulClaudeSessionId = '';
+      let bridgeRequestToken = 0;
+
+      const styleClaudeStatus = (
+        node: HTMLDivElement,
+        tone: 'default' | 'success' | 'error',
+      ) => {
+        if (tone === 'success') {
+          node.style.background = 'rgba(20, 96, 62, 0.22)';
+          node.style.color = '#dffbed';
+          node.style.border = '1px solid rgba(83, 211, 149, 0.24)';
+          return;
+        }
+
+        if (tone === 'error') {
+          node.style.background = 'rgba(105, 31, 40, 0.24)';
+          node.style.color = '#ffe4ea';
+          node.style.border = '1px solid rgba(255, 119, 143, 0.24)';
+          return;
+        }
+
+        node.style.background = 'rgba(255,255,255,0.04)';
+        node.style.color = '#b7c4da';
+        node.style.border = '1px solid rgba(255,255,255,0.08)';
+      };
+
+      const syncSaveButtonLabel = () => {
+        saveButton.textContent = currentClip ? 'Save changes' : 'Save clip';
+      };
+
+      const readStoredBridgeSelection = async () => {
+        try {
+          const result = await chrome.storage.local.get([
+            bridgeSelectedWorkspaceStorageKey,
+            bridgeSelectedSessionStorageKey,
+          ]);
+
+          return {
+            workspaceId:
+              typeof result[bridgeSelectedWorkspaceStorageKey] === 'string'
+                ? result[bridgeSelectedWorkspaceStorageKey]
+                : '',
+            sessionId:
+              typeof result[bridgeSelectedSessionStorageKey] === 'string'
+                ? result[bridgeSelectedSessionStorageKey]
+                : '',
+          };
+        } catch {
+          return {
+            workspaceId: '',
+            sessionId: '',
+          };
+        }
+      };
+
+      const persistBridgeSelection = async (workspaceId: string, sessionId: string) => {
+        try {
+          await chrome.storage.local.set({
+            [bridgeSelectedWorkspaceStorageKey]: workspaceId,
+            [bridgeSelectedSessionStorageKey]: sessionId,
+          });
+        } catch (error) {
+          console.warn('LLM Clip could not persist the selected Claude session.', error);
+        }
+      };
+
+      const getClaudeTaskStatusMessage = (
+        task: { delivery: { state: string; error?: string | null } },
+        sessionLabel: string,
+      ) => {
+        if (task.delivery.state === 'delivered') {
+          return `Sent to ${sessionLabel}. The local incident packet was preserved.`;
+        }
+
+        if (task.delivery.state === 'failed_after_bundle_creation') {
+          return `Claude delivery to ${sessionLabel} failed after bundle creation. The local packet was preserved.`;
+        }
+
+        if (task.delivery.state === 'bundle_created') {
+          return `The incident packet for ${sessionLabel} was created locally.`;
+        }
+
+        return `Sending to ${sessionLabel}...`;
+      };
+
+      const renderClaudeSessionSurfaces = () => {
+        claudeSessionSurfaces.forEach(({ mode, root }) => {
+          root.replaceChildren();
+
+          const head = document.createElement('div');
+          head.style.display = 'flex';
+          head.style.alignItems = 'center';
+          head.style.justifyContent = 'space-between';
+          head.style.gap = '10px';
+          head.style.flexWrap = 'wrap';
+
+          const labelBlock = document.createElement('div');
+          labelBlock.style.display = 'grid';
+          labelBlock.style.gap = '4px';
+
+          const eyebrow = document.createElement('div');
+          eyebrow.textContent = 'CLAUDE SESSIONS';
+          eyebrow.style.color = '#88d5ff';
+          eyebrow.style.fontSize = mode === 'rail' ? '11px' : '10px';
+          eyebrow.style.fontWeight = '700';
+          eyebrow.style.letterSpacing = '0.08em';
+          eyebrow.style.textTransform = 'uppercase';
+
+          const copy = document.createElement('div');
+          copy.textContent =
+            mode === 'rail'
+              ? 'Send this clip directly into a live Claude session on your local bridge.'
+              : 'Send this clip directly from the debug report.';
+          copy.style.color = '#b7c4da';
+          copy.style.fontSize = mode === 'rail' ? '12px' : '11px';
+          copy.style.lineHeight = '1.45';
+
+          labelBlock.append(eyebrow, copy);
+
+          const controls = document.createElement('div');
+          controls.style.display = 'flex';
+          controls.style.alignItems = 'center';
+          controls.style.gap = '8px';
+          controls.style.flexWrap = 'wrap';
+
+          if (bridgeWorkspaces.length > 1) {
+            const workspaceSelect = document.createElement('select');
+            workspaceSelect.value = selectedWorkspaceId;
+            workspaceSelect.disabled = isBridgeLoading || isBridgeSending;
+            workspaceSelect.style.borderRadius = '10px';
+            workspaceSelect.style.border = '1px solid rgba(117, 204, 255, 0.2)';
+            workspaceSelect.style.background = 'rgba(6, 12, 22, 0.92)';
+            workspaceSelect.style.color = '#edf3fb';
+            workspaceSelect.style.font = 'inherit';
+            workspaceSelect.style.fontSize = '12px';
+            workspaceSelect.style.padding = '8px 10px';
+
+            bridgeWorkspaces.forEach((workspace) => {
+              const option = document.createElement('option');
+              option.value = workspace.id;
+              option.textContent = workspace.name;
+              workspaceSelect.append(option);
+            });
+
+            workspaceSelect.addEventListener('change', () => {
+              void changeBridgeWorkspace(workspaceSelect.value);
+            });
+            controls.append(workspaceSelect);
+          } else if (bridgeWorkspaces.length === 1) {
+            const workspacePill = document.createElement('div');
+            workspacePill.textContent = bridgeWorkspaces[0]!.name;
+            workspacePill.style.padding = '8px 10px';
+            workspacePill.style.borderRadius = '999px';
+            workspacePill.style.background = 'rgba(255,255,255,0.06)';
+            workspacePill.style.color = '#dbe8f8';
+            workspacePill.style.fontSize = '12px';
+            workspacePill.style.fontWeight = '700';
+            controls.append(workspacePill);
+          }
+
+          const refreshButton = document.createElement('button');
+          refreshButton.type = 'button';
+          refreshButton.textContent = isBridgeLoading ? 'Refreshing...' : 'Refresh';
+          refreshButton.disabled = isBridgeLoading || isBridgeSending;
+          refreshButton.style.border = '0';
+          refreshButton.style.borderRadius = '10px';
+          refreshButton.style.padding = '8px 10px';
+          refreshButton.style.font = 'inherit';
+          refreshButton.style.fontSize = '12px';
+          refreshButton.style.fontWeight = '700';
+          refreshButton.style.cursor = 'pointer';
+          refreshButton.style.background = 'rgba(255,255,255,0.08)';
+          refreshButton.style.color = '#edf3fb';
+          refreshButton.addEventListener('click', () => {
+            void refreshBridgeSessions(true);
+          });
+          controls.append(refreshButton);
+
+          head.append(labelBlock, controls);
+
+          const sessionRow = document.createElement('div');
+          sessionRow.style.display = 'flex';
+          sessionRow.style.gap = '8px';
+          sessionRow.style.flexWrap = 'wrap';
+
+          if (bridgeSessions.length) {
+            bridgeSessions.forEach((session) => {
+              const sessionButton = document.createElement('button');
+              sessionButton.type = 'button';
+              const isSendingSession = isBridgeSending && activeClaudeSessionId === session.id;
+              const isSentSession = !isBridgeSending && successfulClaudeSessionId === session.id;
+              sessionButton.textContent = isSendingSession ? 'Sending...' : isSentSession ? 'Sent' : session.label;
+              sessionButton.disabled = isBridgeLoading || isBridgeSending;
+              sessionButton.style.border = '1px solid transparent';
+              sessionButton.style.borderRadius = '12px';
+              sessionButton.style.padding = '10px 12px';
+              sessionButton.style.font = 'inherit';
+              sessionButton.style.fontSize = '12px';
+              sessionButton.style.fontWeight = '700';
+              sessionButton.style.cursor = sessionButton.disabled ? 'default' : 'pointer';
+              sessionButton.style.transition = 'background 120ms ease, border-color 120ms ease, color 120ms ease';
+              sessionButton.style.background = isSentSession
+                ? 'rgba(20, 96, 62, 0.3)'
+                : selectedClaudeSessionId === session.id
+                  ? 'rgba(83, 197, 255, 0.18)'
+                  : 'rgba(255,255,255,0.08)';
+              sessionButton.style.borderColor = isSentSession
+                ? 'rgba(83, 211, 149, 0.28)'
+                : selectedClaudeSessionId === session.id
+                  ? 'rgba(83, 197, 255, 0.38)'
+                  : 'rgba(255,255,255,0.08)';
+              sessionButton.style.color = '#edf3fb';
+              sessionButton.addEventListener('click', () => {
+                void sendToClaudeSession(session);
+              });
+              sessionRow.append(sessionButton);
+            });
+          } else {
+            const empty = document.createElement('div');
+            empty.textContent = isBridgeLoading
+              ? 'Loading live Claude sessions...'
+              : selectedWorkspaceId
+                ? 'No live Claude sessions in this workspace yet.'
+                : bridgeWorkspaces.length
+                  ? 'Pick a workspace to load live Claude sessions.'
+                  : 'No bridge workspaces are available yet.';
+            empty.style.color = '#9db2cf';
+            empty.style.fontSize = '12px';
+            empty.style.lineHeight = '1.45';
+            sessionRow.append(empty);
+          }
+
+          const status = document.createElement('div');
+          status.style.display = 'block';
+          status.style.padding = '9px 10px';
+          status.style.borderRadius = '12px';
+          status.style.fontSize = '12px';
+          status.style.fontWeight = '600';
+          status.style.lineHeight = '1.45';
+          status.textContent =
+            bridgeStatusMessage ||
+            (bridgeWorkspaces.length
+              ? 'Live sessions are discovered through the local bridge and stay local unless you send them.'
+              : 'Start the local bridge and Claude hooks to enable direct send.');
+          styleClaudeStatus(status, bridgeStatusTone);
+
+          root.append(head, sessionRow, status);
+        });
+      };
+
+      const changeBridgeWorkspace = async (workspaceId: string) => {
+        selectedWorkspaceId = workspaceId;
+        selectedClaudeSessionId = '';
+        successfulClaudeSessionId = '';
+        bridgeStatusMessage = '';
+        bridgeStatusTone = 'default';
+        renderClaudeSessionSurfaces();
+        await persistBridgeSelection(selectedWorkspaceId, '');
+        await refreshBridgeSessions(false);
+      };
+
+      const refreshBridgeSessions = async (reloadWorkspaces: boolean) => {
+        const requestToken = ++bridgeRequestToken;
+        isBridgeLoading = true;
+        bridgeStatusMessage = '';
+        bridgeStatusTone = 'default';
+        renderClaudeSessionSurfaces();
+
+        try {
+          const storedSelection = await readStoredBridgeSelection();
+
+          if (reloadWorkspaces || bridgeWorkspaces.length === 0) {
+            const workspaceResponse = await chrome.runtime.sendMessage({
+              type: 'get-bridge-workspaces',
+            });
+
+            if (!workspaceResponse?.ok) {
+              throw new Error(workspaceResponse?.error || 'The local bridge workspaces could not be loaded.');
+            }
+
+            if (requestToken !== bridgeRequestToken) {
+              return;
+            }
+
+            bridgeWorkspaces = (workspaceResponse.workspaces ?? []).map((workspace: {
+              id: string;
+              name: string;
+              sessionCount: number;
+            }) => ({
+              id: workspace.id,
+              name: workspace.name,
+              sessionCount: workspace.sessionCount,
+            }));
+
+            selectedWorkspaceId = pickWorkspaceId(
+              bridgeWorkspaces,
+              selectedWorkspaceId || storedSelection.workspaceId,
+            );
+          }
+
+          if (!selectedWorkspaceId) {
+            bridgeSessions = [];
+            bridgeStatusMessage = bridgeWorkspaces.length
+              ? 'Pick a workspace to inspect live Claude sessions.'
+              : 'The local bridge returned no workspaces.';
+            bridgeStatusTone = bridgeWorkspaces.length ? 'default' : 'error';
+            await persistBridgeSelection('', '');
+            return;
+          }
+
+          const sessionResponse = await chrome.runtime.sendMessage({
+            type: 'get-bridge-sessions',
+            workspaceId: selectedWorkspaceId,
+          });
+
+          if (!sessionResponse?.ok) {
+            throw new Error(sessionResponse?.error || 'The local bridge sessions could not be loaded.');
+          }
+
+          if (requestToken !== bridgeRequestToken) {
+            return;
+          }
+
+          bridgeSessions = (sessionResponse.sessions ?? []).map((session: {
+            id: string;
+            label: string;
+            pendingApprovalCount?: number;
+          }) => ({
+            id: session.id,
+            label: session.label,
+            pendingApprovalCount: session.pendingApprovalCount,
+          }));
+          selectedClaudeSessionId = pickSessionId(
+            bridgeSessions,
+            selectedClaudeSessionId || storedSelection.sessionId,
+          );
+          await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
+        } catch (error) {
+          bridgeWorkspaces = reloadWorkspaces ? [] : bridgeWorkspaces;
+          bridgeSessions = [];
+          bridgeStatusMessage =
+            error instanceof Error ? error.message : 'LLM Clip could not reach the local Claude bridge.';
+          bridgeStatusTone = 'error';
+        } finally {
+          if (requestToken === bridgeRequestToken) {
+            isBridgeLoading = false;
+            renderClaudeSessionSurfaces();
+          }
+        }
+      };
+
+      const sendToClaudeSession = async (targetSession: OverlayBridgeSession) => {
+        if (!selectedWorkspaceId || isBridgeSending) {
+          return;
+        }
+
+        isBridgeSending = true;
+        activeClaudeSessionId = targetSession.id;
+        successfulClaudeSessionId = '';
+        selectedClaudeSessionId = targetSession.id;
+        bridgeStatusMessage = `Sending to ${targetSession.label}...`;
+        bridgeStatusTone = 'default';
+        renderClaudeSessionSurfaces();
+        setActionStatus(`Sending to ${targetSession.label}...`);
+        await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
+
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: 'send-bridge-claude-session',
+            workspaceId: selectedWorkspaceId,
+            sessionId: targetSession.id,
+            clipId: currentClip?.clipId,
+            draftTitle: clipTitle,
+            draftNote: noteField.value,
+            draftAnnotations: annotations,
+            intent: 'fix',
+            scope: 'active_clip',
+            evidenceProfile: 'balanced',
+            ...(currentClip
+              ? {}
+              : {
+                  newClip: {
+                    clipMode,
+                    title: clipTitle,
+                    note: noteField.value,
+                    imageDataUrl: clipDataUrl,
+                    imageWidth: image.naturalWidth,
+                    imageHeight: image.naturalHeight,
+                    crop: rect,
+                    pageContext,
+                    runtimeContext,
+                    annotations,
+                  },
+                }),
+          });
+
+          if (!response?.ok || !response.task) {
+            throw new Error(response?.error || 'The local Claude session handoff failed.');
+          }
+
+          const resultingClipId = currentClip?.clipId || response.session?.activeClipId || '';
+          if (resultingClipId) {
+            currentClip = {
+              clipId: resultingClipId,
+              title: clipTitle,
+              note: noteField.value,
+              annotations: annotations.map((annotation) => ({ ...annotation })),
+              crop: rect,
+            };
+          }
+          syncSaveButtonLabel();
+
+          successfulClaudeSessionId = targetSession.id;
+          bridgeStatusMessage = getClaudeTaskStatusMessage(response.task, targetSession.label);
+          bridgeStatusTone = response.task.delivery.state === 'failed_after_bundle_creation' ? 'error' : 'success';
+          setActionStatus(
+            bridgeStatusMessage,
+            response.task.delivery.state === 'failed_after_bundle_creation' ? 'error' : 'success',
+          );
+          announce(bridgeStatusMessage, response.task.delivery.state === 'failed_after_bundle_creation' ? 'error' : 'success');
+        } catch (error) {
+          if (!currentClip) {
+            try {
+              const sessionResponse = await chrome.runtime.sendMessage({
+                type: 'get-clip-session',
+              });
+              const recoveredClipId = sessionResponse?.ok ? sessionResponse.session?.activeClipId ?? '' : '';
+              if (recoveredClipId) {
+                currentClip = {
+                  clipId: recoveredClipId,
+                  title: clipTitle,
+                  note: noteField.value,
+                  annotations: annotations.map((annotation) => ({ ...annotation })),
+                  crop: rect,
+                };
+                syncSaveButtonLabel();
+              }
+            } catch {
+              // Ignore if we cannot recover the just-saved clip after a failed send.
+            }
+          }
+          bridgeStatusMessage =
+            error instanceof Error ? error.message : 'The local Claude session handoff failed.';
+          bridgeStatusTone = 'error';
+          setActionStatus('Claude session send failed.', 'error');
+          announce(bridgeStatusMessage, 'error');
+        } finally {
+          isBridgeSending = false;
+          activeClaudeSessionId = '';
+          renderClaudeSessionSurfaces();
+        }
+      };
+
+      syncSaveButtonLabel();
+      renderClaudeSessionSurfaces();
+      void refreshBridgeSessions(true);
+
       const autoCopyClipImage = async () => {
         try {
           await copyImageToClipboard(clipDataUrl);
@@ -3209,18 +3742,18 @@ function mountClipOverlay(
           try {
             saveButton.disabled = true;
             saveButton.textContent = 'Saving...';
-            setActionStatus(initialClip ? 'Saving changes...' : 'Saving clip...');
+            setActionStatus(currentClip ? 'Saving changes...' : 'Saving clip...');
 
-            if (initialClip) {
+            if (currentClip) {
               const [noteResponse, annotationsResponse] = await Promise.all([
                 chrome.runtime.sendMessage({
                   type: 'update-clip-note',
-                  clipId: initialClip.clipId,
+                  clipId: currentClip.clipId,
                   note: noteField.value,
                 }),
                 chrome.runtime.sendMessage({
                   type: 'update-clip-annotations',
-                  clipId: initialClip.clipId,
+                  clipId: currentClip.clipId,
                   annotations,
                 }),
               ]);
@@ -3258,7 +3791,7 @@ function mountClipOverlay(
             setActionStatus('Clip save failed.', 'error');
             announce(error instanceof Error ? error.message : 'Clip save failed.', 'error');
             saveButton.disabled = false;
-            saveButton.textContent = 'Save to session';
+            syncSaveButtonLabel();
           }
         })();
       });
