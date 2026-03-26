@@ -1,5 +1,6 @@
 import {
   createBridgeTask,
+  listBridgeActiveSessions,
   listBridgeSessions,
   listBridgeWorkspaces,
   waitForBridgeTask,
@@ -155,6 +156,10 @@ export async function loadBridgeSessions(workspaceId: string): Promise<BridgeSes
   }
 
   return listBridgeSessions(workspaceId);
+}
+
+export async function loadBridgeActiveSessions(): Promise<BridgeSession[]> {
+  return listBridgeActiveSessions();
 }
 
 export async function sendClipToClaudeSession(

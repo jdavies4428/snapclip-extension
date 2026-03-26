@@ -1,7 +1,7 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { cancelClipOverlay, openSavedClipEditor, startClipWorkflow } from './clipping';
-import { loadBridgeSessions, loadBridgeWorkspaces, sendClipToClaudeSession } from './bridge-handoff';
+import { loadBridgeActiveSessions, loadBridgeSessions, loadBridgeWorkspaces, sendClipToClaudeSession } from './bridge-handoff';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
 import { getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
@@ -106,6 +106,14 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
         return { ok: true, sessions };
       } catch (error) {
         return { ok: false, error: normalizeBridgeMessageError(error, 'The local bridge sessions could not be loaded.') };
+      }
+    }
+    case 'get-bridge-active-sessions': {
+      try {
+        const sessions = await loadBridgeActiveSessions();
+        return { ok: true, sessions };
+      } catch (error) {
+        return { ok: false, error: normalizeBridgeMessageError(error, 'The local bridge active sessions could not be loaded.') };
       }
     }
     case 'update-clip-note': {

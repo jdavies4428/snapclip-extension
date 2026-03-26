@@ -47,6 +47,10 @@ export type GetBridgeSessionsMessage = {
   workspaceId: string;
 };
 
+export type GetBridgeActiveSessionsMessage = {
+  type: 'get-bridge-active-sessions';
+};
+
 export type SendBridgeClaudeSessionMessage = {
   type: 'send-bridge-claude-session';
   workspaceId: string;
@@ -130,6 +134,7 @@ export type SnapClipMessage =
   | GetClipSessionMessage
   | GetBridgeWorkspacesMessage
   | GetBridgeSessionsMessage
+  | GetBridgeActiveSessionsMessage
   | SendBridgeClaudeSessionMessage
   | UpdateClipTitleMessage
   | UpdateClipNoteMessage

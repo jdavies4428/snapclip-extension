@@ -29,17 +29,44 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((error) => console.error('Failed to set side panel behavior', error));
 });
 
-async function openSidePanelForLastFocusedWindow() {
-  const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
-  const targetTab =
-    tabs.find((tab) => typeof tab.windowId === 'number' && tab.active) ??
-    tabs.find((tab) => typeof tab.windowId === 'number');
+let lastFocusedWindowId: number | null = null;
 
-  if (typeof targetTab?.windowId !== 'number') {
+void chrome.windows
+  .getLastFocused()
+  .then((windowInfo) => {
+    if (typeof windowInfo.id === 'number' && windowInfo.id !== chrome.windows.WINDOW_ID_NONE) {
+      lastFocusedWindowId = windowInfo.id;
+    }
+  })
+  .catch(() => {
+    lastFocusedWindowId = null;
+  });
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+    lastFocusedWindowId = windowId;
+  }
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (typeof activeInfo.windowId === 'number') {
+    lastFocusedWindowId = activeInfo.windowId;
+  }
+});
+
+async function openSidePanelForLastFocusedWindow() {
+  if (typeof lastFocusedWindowId === 'number') {
+    await chrome.sidePanel.open({ windowId: lastFocusedWindowId });
+    return;
+  }
+
+  const windowInfo = await chrome.windows.getLastFocused();
+  if (typeof windowInfo.id !== 'number' || windowInfo.id === chrome.windows.WINDOW_ID_NONE) {
     throw new Error('No active browser window was found.');
   }
 
-  await chrome.sidePanel.open({ windowId: targetTab.windowId });
+  lastFocusedWindowId = windowInfo.id;
+  await chrome.sidePanel.open({ windowId: windowInfo.id });
 }
 
 async function openLastCapturedClipEditor() {
@@ -75,12 +102,12 @@ async function openLastCapturedClipEditor() {
 
 chrome.commands.onCommand.addListener(async (command) => {
   try {
-    await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
-
     if (command === 'open-side-panel') {
       await openSidePanelForLastFocusedWindow();
       return;
     }
+
+    await chrome.storage.local.remove(STORAGE_KEYS.lastLaunchError);
 
     if (command === 'open-last-clip-editor') {
       await openLastCapturedClipEditor();
@@ -109,13 +136,15 @@ chrome.commands.onCommand.addListener(async (command) => {
   } catch (error) {
     console.error('Failed to handle command', error);
     const errorMessage = normalizeLaunchError(error);
-    await chrome.storage.local.set({
-      [STORAGE_KEYS.lastLaunchError]: errorMessage,
-    });
-    try {
-      await openSidePanelForLastFocusedWindow();
-    } catch {
-      // Ignore if the side panel cannot be opened here.
+    if (command !== 'open-side-panel') {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.lastLaunchError]: errorMessage,
+      });
+      try {
+        await openSidePanelForLastFocusedWindow();
+      } catch {
+        // Ignore if the side panel cannot be opened here.
+      }
     }
   }
 });

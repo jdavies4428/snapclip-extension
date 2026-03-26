@@ -14,6 +14,7 @@ export type BridgeWorkspace = {
 export type BridgeSession = {
   id: string;
   workspaceId: string;
+  workspaceName?: string | null;
   label: string;
   surface: string;
   cwd: string;
@@ -215,6 +216,11 @@ export async function listBridgeSessions(workspaceId: string): Promise<BridgeSes
   const response = await fetchBridge<{ sessions?: BridgeSession[] }>(
     `/sessions?workspaceId=${encodeURIComponent(workspaceId)}&view=live`,
   );
+  return Array.isArray(response.sessions) ? response.sessions : [];
+}
+
+export async function listBridgeActiveSessions(): Promise<BridgeSession[]> {
+  const response = await fetchBridge<{ sessions?: BridgeSession[] }>('/sessions/active');
   return Array.isArray(response.sessions) ? response.sessions : [];
 }
 

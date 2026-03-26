@@ -830,10 +830,10 @@ function mountClipOverlay(
       editor.style.left = '50%';
       editor.style.top = '50%';
       editor.style.transform = 'translate(-50%, -50%)';
-      editor.style.width = 'min(96vw, 1720px)';
-      editor.style.height = '94vh';
-      editor.style.maxWidth = '96vw';
-      editor.style.maxHeight = '94vh';
+      editor.style.width = 'min(98vw, 1840px)';
+      editor.style.height = '96vh';
+      editor.style.maxWidth = '98vw';
+      editor.style.maxHeight = '96vh';
       editor.style.overflow = 'hidden';
       editor.style.boxSizing = 'border-box';
       editor.style.padding = '20px';
@@ -1214,21 +1214,20 @@ function mountClipOverlay(
       const debugWorkspace = document.createElement('section');
       debugWorkspace.dataset.snapclipScroll = 'hidden';
       debugWorkspace.style.display = 'none';
-      debugWorkspace.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
+      debugWorkspace.style.gridTemplateRows = 'auto minmax(0, 1fr)';
       debugWorkspace.style.alignContent = 'start';
-      debugWorkspace.style.gap = '14px';
+      debugWorkspace.style.gap = '12px';
       debugWorkspace.style.minHeight = '0';
-      debugWorkspace.style.overflowY = 'auto';
-      debugWorkspace.style.paddingRight = '4px';
+      debugWorkspace.style.overflow = 'hidden';
       debugWorkspace.style.scrollbarWidth = 'none';
       debugWorkspace.style.setProperty('-ms-overflow-style', 'none');
 
       const detailsHead = document.createElement('div');
       detailsHead.style.display = 'flex';
-      detailsHead.style.alignItems = 'center';
+      detailsHead.style.alignItems = 'flex-start';
       detailsHead.style.justifyContent = 'space-between';
-      detailsHead.style.gap = '10px';
-      detailsHead.style.padding = '6px 2px 0';
+      detailsHead.style.gap = '18px';
+      detailsHead.style.padding = '2px 0 0';
 
       const detailsTitleBlock = document.createElement('div');
       detailsTitleBlock.style.display = 'grid';
@@ -1254,10 +1253,10 @@ function mountClipOverlay(
 
       const detailsLead = document.createElement('p');
       detailsLead.textContent =
-        'Browse clip evidence the way Jam does: environment, console, network, actions, and AI handoff, all attached to this local capture.';
+        'What happened left. Why it failed right.';
       detailsLead.style.margin = '0';
       detailsLead.style.color = '#b7c4da';
-      detailsLead.style.fontSize = '14px';
+      detailsLead.style.fontSize = '12px';
       detailsLead.style.lineHeight = '1.5';
 
       const detailsActions = document.createElement('div');
@@ -1297,7 +1296,7 @@ function mountClipOverlay(
       claudeDebugStrip.style.border = '1px solid rgba(103, 209, 255, 0.16)';
 
       detailsTitleBlock.append(detailsEyebrow, detailsTitle, detailsLead);
-      detailsHeaderStack.append(detailsTitleBlock, claudeDebugStrip);
+      detailsHeaderStack.append(detailsTitleBlock);
       detailsActions.append(copyDebugButton, detailsBackButton);
       detailsHead.append(detailsHeaderStack, detailsActions);
 
@@ -1329,6 +1328,7 @@ function mountClipOverlay(
 
       const runtimeSummary = runtimeContext?.summary;
       const chromeDebugger = runtimeContext?.chromeDebugger ?? null;
+      const debugCurrentUrl = chromeDebugger?.currentUrl || pageContext.url;
       const clipAreaLabel = `${Math.round(rect.width)} x ${Math.round(rect.height)} at ${Math.round(rect.x)}, ${Math.round(rect.y)}`;
       const viewportLabel = `${pageContext.viewport.width} x ${pageContext.viewport.height} @ ${pageContext.viewport.dpr}x`;
       const friendlyDebuggerMessage = (() => {
@@ -1477,11 +1477,11 @@ function mountClipOverlay(
       const makeSectionCard = (title: string, subtitle?: string) => {
         const card = document.createElement('section');
         card.style.display = 'grid';
-        card.style.gap = '10px';
-        card.style.padding = '14px';
-        card.style.borderRadius = '18px';
-        card.style.border = '1px solid rgba(157, 177, 207, 0.16)';
-        card.style.background = 'rgba(255, 255, 255, 0.04)';
+        card.style.gap = '8px';
+        card.style.padding = '12px';
+        card.style.borderRadius = '14px';
+        card.style.border = '1px solid rgba(157, 177, 207, 0.12)';
+        card.style.background = 'rgba(255, 255, 255, 0.028)';
 
         const head = document.createElement('div');
         head.style.display = 'grid';
@@ -1490,7 +1490,7 @@ function mountClipOverlay(
         const heading = document.createElement('h4');
         heading.textContent = title;
         heading.style.margin = '0';
-        heading.style.fontSize = '15px';
+        heading.style.fontSize = '14px';
         heading.style.color = '#eef4fb';
 
         head.append(heading);
@@ -1500,7 +1500,7 @@ function mountClipOverlay(
           sub.textContent = subtitle;
           sub.style.margin = '0';
           sub.style.color = '#9db2cf';
-          sub.style.fontSize = '12px';
+          sub.style.fontSize = '11px';
           sub.style.lineHeight = '1.45';
           head.append(sub);
         }
@@ -1512,9 +1512,9 @@ function mountClipOverlay(
       const makeMetricPill = (label: string, value: string, tone: 'default' | 'error' | 'warn' = 'default') => {
         const pill = document.createElement('div');
         pill.style.display = 'grid';
-        pill.style.gap = '2px';
-        pill.style.padding = '12px';
-        pill.style.borderRadius = '14px';
+        pill.style.gap = '1px';
+        pill.style.padding = '10px 12px';
+        pill.style.borderRadius = '12px';
         pill.style.border =
           tone === 'error'
             ? '1px solid rgba(255, 132, 95, 0.2)'
@@ -1531,7 +1531,7 @@ function mountClipOverlay(
         const metricValue = document.createElement('strong');
         metricValue.textContent = value;
         metricValue.style.color = '#eef4fb';
-        metricValue.style.fontSize = '16px';
+        metricValue.style.fontSize = '15px';
 
         const metricLabel = document.createElement('span');
         metricLabel.textContent = label;
@@ -1544,12 +1544,6 @@ function mountClipOverlay(
         pill.append(metricValue, metricLabel);
         return pill;
       };
-
-      const formatCount = (value: number | null | undefined) => (typeof value === 'number' ? value.toLocaleString() : 'n/a');
-      const formatBytes = (value: number | null | undefined) =>
-        typeof value === 'number' ? `${Math.round(value / 1024).toLocaleString()} KB` : 'n/a';
-      const formatDuration = (value: number | null | undefined) =>
-        typeof value === 'number' ? `${value.toFixed(2)} s` : 'n/a';
 
       const makeKeyValueRow = (label: string, value: string) => {
         const row = document.createElement('div');
@@ -1575,39 +1569,6 @@ function mountClipOverlay(
         return row;
       };
 
-      const makeTagList = (items: string[], emptyText: string) => {
-        const list = document.createElement('div');
-        list.style.display = 'flex';
-        list.style.flexWrap = 'wrap';
-        list.style.gap = '8px';
-
-        if (items.length === 0) {
-          const empty = document.createElement('p');
-          empty.textContent = emptyText;
-          empty.style.margin = '0';
-          empty.style.color = '#9db2cf';
-          empty.style.fontSize = '13px';
-          empty.style.lineHeight = '1.45';
-          list.append(empty);
-          return list;
-        }
-
-        items.forEach((item) => {
-          const tag = document.createElement('span');
-          tag.textContent = item;
-          tag.style.display = 'inline-flex';
-          tag.style.alignItems = 'center';
-          tag.style.padding = '8px 10px';
-          tag.style.borderRadius = '999px';
-          tag.style.background = 'rgba(255, 255, 255, 0.06)';
-          tag.style.color = '#e7effb';
-          tag.style.fontSize = '12px';
-          list.append(tag);
-        });
-
-        return list;
-      };
-
       const makeEmptyInspectorMessage = (message: string) => {
         const empty = document.createElement('div');
         empty.textContent = message;
@@ -1629,6 +1590,7 @@ function mountClipOverlay(
       overviewStrip.style.display = 'grid';
       overviewStrip.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
       overviewStrip.style.gap = '8px';
+      overviewStrip.style.paddingBottom = '4px';
 
       overviewStrip.append(
         makeMetricPill('Errors', String(runtimeSummary?.errorCount ?? 0), 'error'),
@@ -1650,9 +1612,9 @@ function mountClipOverlay(
         items.forEach((entry) => {
           const item = document.createElement('div');
           item.style.display = 'grid';
-          item.style.gap = '6px';
-          item.style.padding = '12px';
-          item.style.borderRadius = '14px';
+          item.style.gap = '4px';
+          item.style.padding = '10px 12px';
+          item.style.borderRadius = '12px';
           item.style.border =
             entry.tone === 'error'
               ? '1px solid rgba(255, 132, 95, 0.24)'
@@ -1677,7 +1639,7 @@ function mountClipOverlay(
           const value = document.createElement('div');
           value.textContent = entry.value;
           value.style.color = '#eef4fb';
-          value.style.fontSize = '13px';
+          value.style.fontSize = '12px';
           value.style.lineHeight = '1.5';
           value.style.wordBreak = 'break-word';
 
@@ -1687,69 +1649,6 @@ function mountClipOverlay(
 
         return list;
       };
-
-      const importantFindings: InsightRow[] = [];
-      if (runtimeSummary?.errorCount) {
-        importantFindings.push({
-          label: 'Runtime errors',
-          value: `${runtimeSummary.errorCount} error${runtimeSummary.errorCount === 1 ? '' : 's'} were captured while clipping this page.`,
-          tone: 'error',
-        });
-      }
-      if (runtimeSummary?.failedRequestCount) {
-        importantFindings.push({
-          label: 'Failed requests',
-          value: `${runtimeSummary.failedRequestCount} request${runtimeSummary.failedRequestCount === 1 ? '' : 's'} failed during capture.`,
-          tone: 'error',
-        });
-      }
-      if (runtimeSummary?.warningCount) {
-        importantFindings.push({
-          label: 'Warnings',
-          value: `${runtimeSummary.warningCount} warning${runtimeSummary.warningCount === 1 ? '' : 's'} showed up while clipping.`,
-          tone: 'warn',
-        });
-      }
-      if (runtimeSummary?.slowRequestCount) {
-        importantFindings.push({
-          label: 'Slow requests',
-          value: `${runtimeSummary.slowRequestCount} request${runtimeSummary.slowRequestCount === 1 ? '' : 's'} took longer than expected.`,
-          tone: 'warn',
-        });
-      }
-      recentMessages.slice(0, 2).forEach((message, index) => {
-        importantFindings.push({
-          label: index === 0 ? 'Latest signal' : 'Also captured',
-          value: message,
-          tone: message.startsWith('ERROR') || message.includes(' ERR ') ? 'error' : message.startsWith('WARN') ? 'warn' : 'default',
-        });
-      });
-      if (friendlyDebuggerMessage) {
-        importantFindings.push({
-          label: 'Extra Chrome data',
-          value: friendlyDebuggerMessage,
-          tone: 'warn',
-        });
-      }
-
-      const consoleHighlights: InsightRow[] = [
-        ...(runtimeContext?.events
-          .filter((entry) => entry.level !== 'log')
-          .slice(0, 5)
-          .map((entry) => ({
-            label: `${entry.level.toUpperCase()} • ${entry.type.replaceAll('_', ' ')}`,
-            value: entry.message,
-            tone: entry.level === 'error' ? ('error' as const) : ('warn' as const),
-          })) ?? []),
-        ...(chromeDebugger?.logs
-          .filter((entry) => entry.level === 'error' || entry.level === 'warning')
-          .slice(0, 3)
-          .map((entry) => ({
-            label: `Chrome ${entry.level}`,
-            value: entry.text,
-            tone: entry.level === 'error' ? ('error' as const) : ('warn' as const),
-          })) ?? []),
-      ].slice(0, 6);
 
       const requestHighlights: InsightRow[] = [
         ...(runtimeContext?.network
@@ -1776,36 +1675,107 @@ function mountClipOverlay(
           })) ?? []),
       ].slice(0, 6);
 
-      const domSummary = runtimeContext?.domSummary;
+      const debugPreviewCard = makeSectionCard(
+        pageContext.title || 'Captured clip',
+        'Synthetic browser frame using the saved page URL.',
+      );
+      debugPreviewCard.style.padding = '12px';
+      debugPreviewCard.style.gap = '12px';
 
-      const debugTopGrid = document.createElement('div');
-      debugTopGrid.style.display = 'grid';
-      debugTopGrid.style.gridTemplateColumns = 'minmax(280px, 0.95fr) minmax(0, 1.15fr)';
-      debugTopGrid.style.gap = '14px';
+      const previewBrowserFrame = document.createElement('div');
+      previewBrowserFrame.style.display = 'grid';
+      previewBrowserFrame.style.gap = '0';
+      previewBrowserFrame.style.borderRadius = '20px';
+      previewBrowserFrame.style.overflow = 'hidden';
+      previewBrowserFrame.style.border = '1px solid rgba(157, 177, 207, 0.14)';
+      previewBrowserFrame.style.background = 'rgba(8, 12, 22, 0.96)';
 
-      const debugPreviewCard = makeSectionCard('Captured clip', 'The same image evidence that will travel with the report.');
+      const previewBrowserChrome = document.createElement('div');
+      previewBrowserChrome.style.display = 'grid';
+      previewBrowserChrome.style.gridTemplateColumns = 'auto minmax(0, 1fr) auto';
+      previewBrowserChrome.style.alignItems = 'center';
+      previewBrowserChrome.style.gap = '12px';
+      previewBrowserChrome.style.padding = '12px 14px';
+      previewBrowserChrome.style.background =
+        'linear-gradient(180deg, rgba(74, 52, 98, 0.94) 0%, rgba(54, 38, 74, 0.96) 100%)';
+      previewBrowserChrome.style.borderBottom = '1px solid rgba(154, 177, 205, 0.12)';
+
+      const previewBrowserDots = document.createElement('div');
+      previewBrowserDots.style.display = 'flex';
+      previewBrowserDots.style.alignItems = 'center';
+      previewBrowserDots.style.gap = '8px';
+
+      ['rgba(250, 95, 87, 0.9)', 'rgba(251, 188, 5, 0.92)', 'rgba(52, 199, 89, 0.92)'].forEach((color) => {
+        const dot = document.createElement('span');
+        dot.style.display = 'block';
+        dot.style.width = '10px';
+        dot.style.height = '10px';
+        dot.style.borderRadius = '999px';
+        dot.style.background = color;
+        previewBrowserDots.append(dot);
+      });
+
+      const previewUrlBar = document.createElement('div');
+      previewUrlBar.textContent = debugCurrentUrl;
+      previewUrlBar.style.minWidth = '0';
+      previewUrlBar.style.padding = '11px 16px';
+      previewUrlBar.style.borderRadius = '999px';
+      previewUrlBar.style.background = 'rgba(255,255,255,0.08)';
+      previewUrlBar.style.color = '#efe8ff';
+      previewUrlBar.style.fontSize = '13px';
+      previewUrlBar.style.lineHeight = '1.35';
+      previewUrlBar.style.whiteSpace = 'nowrap';
+      previewUrlBar.style.overflow = 'hidden';
+      previewUrlBar.style.textOverflow = 'ellipsis';
+
+      const previewBrowserTag = document.createElement('span');
+      previewBrowserTag.textContent = 'Saved URL';
+      previewBrowserTag.style.display = 'inline-flex';
+      previewBrowserTag.style.alignItems = 'center';
+      previewBrowserTag.style.padding = '0 10px';
+      previewBrowserTag.style.minHeight = '30px';
+      previewBrowserTag.style.borderRadius = '999px';
+      previewBrowserTag.style.background = 'rgba(255,255,255,0.08)';
+      previewBrowserTag.style.color = '#d7def0';
+      previewBrowserTag.style.fontSize = '11px';
+      previewBrowserTag.style.fontWeight = '700';
+      previewBrowserTag.style.letterSpacing = '0.08em';
+      previewBrowserTag.style.textTransform = 'uppercase';
+
+      previewBrowserChrome.append(previewBrowserDots, previewUrlBar, previewBrowserTag);
+
+      const previewCanvas = document.createElement('div');
+      previewCanvas.style.padding = '20px';
+      previewCanvas.style.background =
+        'linear-gradient(180deg, rgba(222, 223, 230, 0.94) 0%, rgba(208, 208, 214, 0.98) 100%)';
+
       const debugPreviewImage = document.createElement('img');
       debugPreviewImage.src = clipDataUrl;
       debugPreviewImage.alt = clipTitle;
       debugPreviewImage.style.display = 'block';
       debugPreviewImage.style.width = '100%';
-      debugPreviewImage.style.maxHeight = '320px';
+      debugPreviewImage.style.maxHeight = '520px';
       debugPreviewImage.style.objectFit = 'contain';
-      debugPreviewImage.style.borderRadius = '16px';
-      debugPreviewImage.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-      debugPreviewImage.style.background = '#050811';
+      debugPreviewImage.style.borderRadius = '18px';
+      debugPreviewImage.style.background = '#ffffff';
+      debugPreviewImage.style.boxShadow = '0 24px 60px rgba(4, 10, 20, 0.26)';
+
+      previewCanvas.append(debugPreviewImage);
+      previewBrowserFrame.append(previewBrowserChrome, previewCanvas);
 
       const previewMeta = document.createElement('div');
       previewMeta.style.display = 'grid';
-      previewMeta.style.gap = '10px';
-      previewMeta.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+      previewMeta.style.gap = '8px';
+      previewMeta.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
       previewMeta.append(
         makeKeyValueRow('Page', pageContext.title || 'Untitled page'),
         makeKeyValueRow('Viewport', viewportLabel),
-        makeKeyValueRow('Clip area', clipAreaLabel),
+        makeKeyValueRow('URL', debugCurrentUrl),
         makeKeyValueRow('Captured', clipMode === 'visible' ? 'Visible tab clip' : 'Area clip'),
+        makeKeyValueRow('Clip area', clipAreaLabel),
+        makeKeyValueRow('Snapshot', chromeDebugger?.attachError ? 'Runtime only' : 'Runtime + debugger'),
       );
-      debugPreviewCard.append(debugPreviewImage, previewMeta);
+      debugPreviewCard.append(previewBrowserFrame, previewMeta);
 
       const promptSummaryCard = makeSectionCard('Agent prompt', 'This prompt stays attached to the clip.');
       const promptSummaryBody = document.createElement('div');
@@ -1820,39 +1790,22 @@ function mountClipOverlay(
       promptSummaryBody.style.lineHeight = '1.6';
       promptSummaryBody.style.whiteSpace = 'pre-wrap';
 
-      const promptSummaryMeta = document.createElement('div');
-      promptSummaryMeta.style.display = 'grid';
-      promptSummaryMeta.style.gap = '8px';
-      summaryLines.forEach((line) => {
-        const item = document.createElement('div');
-        item.textContent = line;
-        item.style.color = '#d8e3f2';
-        item.style.fontSize = '13px';
-        item.style.lineHeight = '1.45';
-        promptSummaryMeta.append(item);
-      });
+      promptSummaryCard.append(promptSummaryBody);
 
-      promptSummaryCard.append(promptSummaryBody, promptSummaryMeta);
-      debugTopGrid.append(debugPreviewCard, promptSummaryCard);
-
-      const importantCard = makeSectionCard(
-        'What matters first',
-        importantFindings.length
-          ? 'Only the most important signals are shown first.'
-          : 'Nothing obvious failed during capture.',
+      const infoSummaryCard = makeSectionCard('Environment', 'Saved with the packet.');
+      const infoMetaGrid = document.createElement('div');
+      infoMetaGrid.style.display = 'grid';
+      infoMetaGrid.style.gap = '10px';
+      infoMetaGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+      infoMetaGrid.append(
+        makeKeyValueRow('URL', debugCurrentUrl),
+        makeKeyValueRow('Captured at', new Date(chromeDebugger?.capturedAt || new Date().toISOString()).toLocaleString()),
+        makeKeyValueRow('Browser', pageContext.userAgent),
+        makeKeyValueRow('Viewport', viewportLabel),
+        makeKeyValueRow('Page title', pageContext.title || 'Untitled page'),
+        makeKeyValueRow('Debugger status', chromeDebugger?.attachError || 'Snapshot captured'),
       );
-      importantCard.append(
-        makeInsightList(
-          importantFindings,
-          'No obvious runtime failures were captured. If this is a visual or interaction bug, the screenshot and your prompt are still the main evidence.',
-        ),
-      );
-
-      const consoleCard = makeSectionCard(
-        'Runtime signals',
-        consoleHighlights.length ? 'Errors and warnings captured while clipping.' : 'No console issues were captured.',
-      );
-      consoleCard.append(makeInsightList(consoleHighlights, 'No runtime errors or warnings were captured for this clip.'));
+      infoSummaryCard.append(infoMetaGrid);
 
       const makeStreamRows = (
         items: Array<{
@@ -1875,9 +1828,9 @@ function mountClipOverlay(
         items.forEach((entry) => {
           const row = document.createElement('div');
           row.style.display = 'grid';
-          row.style.gap = '6px';
-          row.style.padding = '12px 14px';
-          row.style.borderRadius = '14px';
+          row.style.gap = '4px';
+          row.style.padding = '10px 12px';
+          row.style.borderRadius = '12px';
           row.style.border =
             entry.tone === 'error'
               ? '1px solid rgba(255, 132, 95, 0.24)'
@@ -1902,7 +1855,7 @@ function mountClipOverlay(
           const title = document.createElement('div');
           title.textContent = entry.title;
           title.style.color = '#eef4fb';
-          title.style.fontSize = '13px';
+          title.style.fontSize = '12px';
           title.style.lineHeight = '1.5';
           title.style.wordBreak = 'break-word';
 
@@ -1912,7 +1865,7 @@ function mountClipOverlay(
             const detail = document.createElement('div');
             detail.textContent = entry.detail;
             detail.style.color = '#9db2cf';
-            detail.style.fontSize = '12px';
+            detail.style.fontSize = '11px';
             detail.style.lineHeight = '1.5';
             detail.style.wordBreak = 'break-word';
             row.append(detail);
@@ -1932,10 +1885,7 @@ function mountClipOverlay(
           tone: entry.level === 'error' ? ('error' as const) : entry.level === 'warn' ? ('warn' as const) : ('default' as const),
         })) ?? [];
 
-      const consoleDetailCard = makeSectionCard(
-        'Console and runtime',
-        consoleDetailItems.length ? 'Full event stream captured by the page monitor.' : 'No runtime events were captured.',
-      );
+      const consoleDetailCard = makeSectionCard('Runtime');
       consoleDetailCard.append(
         makeStreamRows(consoleDetailItems, 'No runtime events were captured for this clip.'),
       );
@@ -1948,10 +1898,7 @@ function mountClipOverlay(
           tone: entry.level === 'error' ? ('error' as const) : entry.level === 'warning' ? ('warn' as const) : ('default' as const),
         })) ?? [];
 
-      const chromeLogCard = makeSectionCard(
-        'Chrome logs',
-        chromeLogItems.length ? 'Messages captured through the Chrome debugger snapshot.' : 'No Chrome debugger logs were attached.',
-      );
+      const chromeLogCard = makeSectionCard('Browser');
       chromeLogCard.append(
         makeStreamRows(
           chromeLogItems,
@@ -1961,12 +1908,6 @@ function mountClipOverlay(
         ),
       );
 
-      const networkCard = makeSectionCard(
-        'Request signals',
-        requestHighlights.length ? 'Slow or failed requests worth checking first.' : 'No failing or slow requests were captured.',
-      );
-      networkCard.append(makeInsightList(requestHighlights, 'No failing or slow requests were captured for this clip.'));
-
       const runtimeNetworkItems =
         runtimeContext?.network.map((entry) => ({
           eyebrow: `${entry.method} ${entry.status ?? 'ERR'} • ${entry.durationMs}ms`,
@@ -1975,10 +1916,7 @@ function mountClipOverlay(
           tone: entry.classification === 'failed' ? ('error' as const) : entry.classification === 'slow' ? ('warn' as const) : ('default' as const),
         })) ?? [];
 
-      const runtimeNetworkCard = makeSectionCard(
-        'Runtime network',
-        runtimeNetworkItems.length ? 'Requests observed by the in-page monitor.' : 'No runtime network activity was captured.',
-      );
+      const runtimeNetworkCard = makeSectionCard('Page requests');
       runtimeNetworkCard.append(
         makeStreamRows(runtimeNetworkItems, 'No runtime network requests were captured for this clip.'),
       );
@@ -2007,10 +1945,7 @@ function mountClipOverlay(
           };
         }) ?? [];
 
-      const chromeNetworkCard = makeSectionCard(
-        'Chrome network snapshot',
-        chromeNetworkItems.length ? 'Debugger-level requests retained for this clip.' : 'No Chrome debugger requests were attached.',
-      );
+      const chromeNetworkCard = makeSectionCard('Browser requests');
       chromeNetworkCard.append(
         makeStreamRows(
           chromeNetworkItems,
@@ -2020,144 +1955,13 @@ function mountClipOverlay(
         ),
       );
 
-      const pageContextCard = makeSectionCard('Page context', 'Helpful page details without opening inspect.');
-      const selectedTextBody = document.createElement('div');
-      selectedTextBody.textContent = pageContext.domSummary.selectedText || 'No selected text was captured for this clip.';
-      selectedTextBody.style.padding = '12px';
-      selectedTextBody.style.borderRadius = '14px';
-      selectedTextBody.style.background = pageContext.domSummary.selectedText
-        ? 'linear-gradient(135deg, rgba(255, 144, 96, 0.12), rgba(255, 144, 96, 0.04))'
-        : 'rgba(255, 255, 255, 0.03)';
-      selectedTextBody.style.border = pageContext.domSummary.selectedText
-        ? '1px solid rgba(255, 144, 96, 0.18)'
-        : '1px solid rgba(157, 177, 207, 0.14)';
-      selectedTextBody.style.color = pageContext.domSummary.selectedText ? '#eef4fb' : '#9db2cf';
-      selectedTextBody.style.fontSize = '13px';
-      selectedTextBody.style.lineHeight = '1.55';
-
-      const pageMeta = document.createElement('div');
-      pageMeta.style.display = 'grid';
-      pageMeta.style.gap = '10px';
-      pageMeta.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
-      pageMeta.append(
-        makeKeyValueRow('URL', pageContext.url),
-        makeKeyValueRow('Path', domSummary?.path || `${window.location.pathname}${window.location.search}${window.location.hash}`),
+      const networkFocusCard = makeSectionCard('What stands out');
+      networkFocusCard.append(
+        makeInsightList(
+          requestHighlights,
+          'No failing or slow requests were captured for this clip.',
+        ),
       );
-
-      const makeTagGroup = (label: string, items: string[], emptyText: string) => {
-        const group = document.createElement('div');
-        group.style.display = 'grid';
-        group.style.gap = '8px';
-
-        const heading = document.createElement('div');
-        heading.textContent = label;
-        heading.style.color = '#88a2c6';
-        heading.style.fontSize = '11px';
-        heading.style.fontWeight = '700';
-        heading.style.letterSpacing = '0.08em';
-        heading.style.textTransform = 'uppercase';
-
-        group.append(heading, makeTagList(items, emptyText));
-        return group;
-      };
-
-      pageContextCard.append(
-        selectedTextBody,
-        pageMeta,
-        makeTagGroup('Headings', domSummary?.headingTexts || pageContext.domSummary.headings, 'No headings captured.'),
-        makeTagGroup('Buttons', domSummary?.buttonTexts || pageContext.domSummary.buttons, 'No buttons captured.'),
-        makeTagGroup('Fields', domSummary?.inputLabels || pageContext.domSummary.fields, 'No fields captured.'),
-      );
-
-      const technicalDetails = document.createElement('details');
-      technicalDetails.style.display = 'grid';
-      technicalDetails.style.gap = '12px';
-      technicalDetails.style.padding = '14px';
-      technicalDetails.style.borderRadius = '18px';
-      technicalDetails.style.border = '1px solid rgba(157, 177, 207, 0.16)';
-      technicalDetails.style.background = 'rgba(255, 255, 255, 0.03)';
-
-      const technicalSummary = document.createElement('summary');
-      technicalSummary.textContent = 'More technical details';
-      technicalSummary.style.cursor = 'pointer';
-      technicalSummary.style.color = '#eef4fb';
-      technicalSummary.style.fontSize = '15px';
-      technicalSummary.style.fontWeight = '700';
-      technicalSummary.style.listStyle = 'none';
-
-      const technicalBody = document.createElement('div');
-      technicalBody.style.display = 'grid';
-      technicalBody.style.gap = '12px';
-
-      const systemCard = makeSectionCard('Page and browser');
-      systemCard.append(
-        makeKeyValueRow('Page', pageContext.title || 'Untitled page'),
-        makeKeyValueRow('URL', pageContext.url),
-        makeKeyValueRow('Viewport', viewportLabel),
-        makeKeyValueRow('Clip area', clipAreaLabel),
-        makeKeyValueRow('Platform', pageContext.platform),
-        makeKeyValueRow('Language', pageContext.language),
-        makeKeyValueRow('Time zone', pageContext.timeZone),
-        makeKeyValueRow('User agent', pageContext.userAgent),
-      );
-      technicalBody.append(systemCard);
-
-      const monitorCard = makeSectionCard(
-        'Runtime monitor',
-        runtimeSummary ? 'Installed before capture.' : 'No monitor timestamps available.',
-      );
-      monitorCard.append(
-        makeKeyValueRow('Installed', runtimeSummary ? new Date(runtimeSummary.installedAt).toLocaleString() : 'Unavailable'),
-        makeKeyValueRow('Last seen', runtimeSummary ? new Date(runtimeSummary.lastSeenAt).toLocaleString() : 'Unavailable'),
-      );
-      technicalBody.append(monitorCard);
-
-      if (chromeDebugger) {
-        const debuggerSystemCard = makeSectionCard(
-          'Chrome debugger snapshot',
-          friendlyDebuggerMessage
-            ? 'Optional Chrome-only internals were unavailable for this clip.'
-            : `${chromeDebugger.frameCount} frames • ${formatBytes(chromeDebugger.performance.jsHeapUsedSize)} used heap`,
-        );
-        if (friendlyDebuggerMessage) {
-          const unavailableBody = document.createElement('p');
-          unavailableBody.textContent =
-            'You still have the screenshot, prompt, annotations, page context, and runtime signals. This extra Chrome-only layer just was not available for this clip.';
-          unavailableBody.style.margin = '0';
-          unavailableBody.style.color = '#d8e3f2';
-          unavailableBody.style.fontSize = '13px';
-          unavailableBody.style.lineHeight = '1.55';
-          debuggerSystemCard.append(makeKeyValueRow('Status', friendlyDebuggerMessage), unavailableBody);
-
-          if (chromeDebugger.attachError && friendlyDebuggerMessage !== chromeDebugger.attachError) {
-            debuggerSystemCard.append(makeKeyValueRow('Raw error', chromeDebugger.attachError));
-          }
-        } else {
-          debuggerSystemCard.append(
-            makeKeyValueRow('Status', 'Snapshot captured'),
-            makeKeyValueRow('Captured at', new Date(chromeDebugger.capturedAt).toLocaleString()),
-            makeKeyValueRow('Current URL', chromeDebugger.currentUrl),
-            makeKeyValueRow('Current title', chromeDebugger.currentTitle),
-            makeKeyValueRow('Frame count', formatCount(chromeDebugger.frameCount)),
-            makeKeyValueRow('DOM nodes', formatCount(chromeDebugger.performance.nodes)),
-            makeKeyValueRow('JS listeners', formatCount(chromeDebugger.performance.jsEventListeners)),
-            makeKeyValueRow('JS heap used', formatBytes(chromeDebugger.performance.jsHeapUsedSize)),
-            makeKeyValueRow('JS heap total', formatBytes(chromeDebugger.performance.jsHeapTotalSize)),
-            makeKeyValueRow('Layout count', formatCount(chromeDebugger.performance.layoutCount)),
-            makeKeyValueRow('Style recalcs', formatCount(chromeDebugger.performance.recalcStyleCount)),
-            makeKeyValueRow('Task duration', formatDuration(chromeDebugger.performance.taskDuration)),
-          );
-        }
-
-        if (chromeDebugger.detachReason) {
-          debuggerSystemCard.append(makeKeyValueRow('Detach reason', chromeDebugger.detachReason));
-        }
-
-        technicalBody.append(debuggerSystemCard);
-      }
-
-      technicalDetails.append(technicalSummary, technicalBody);
-      technicalDetails.open = true;
 
       const formatTimelineOffset = (timestamp: string, baseline: number) => {
         const current = Date.parse(timestamp);
@@ -2201,12 +2005,7 @@ function mountClipOverlay(
           ? Date.parse(actionTimelineItems[0].timestamp)
           : Date.now();
 
-      const actionTimelineCard = makeSectionCard(
-        'Action timeline',
-        actionTimelineItems.length
-          ? 'A readable sequence of what the clip captured around the bug.'
-          : 'No meaningful actions were captured during this clip.',
-      );
+      const actionTimelineCard = makeSectionCard('Timeline');
       actionTimelineCard.append(
         makeStreamRows(
           actionTimelineItems.map((entry) => ({
@@ -2219,45 +2018,14 @@ function mountClipOverlay(
         ),
       );
 
-      const aiCard = makeSectionCard(
-        'AI handoff',
-        'This is the packet an agent will reason over alongside the clip image.',
-      );
-
-      const aiChecklist = document.createElement('div');
-      aiChecklist.style.display = 'grid';
-      aiChecklist.style.gap = '8px';
-      [
-        noteField.value.trim()
-          ? 'Prompt attached: the model has explicit guidance for what to inspect next.'
-          : 'No prompt attached yet: add one in the editor if you want the model to focus on a specific fix.',
-        importantFindings.length
-          ? `${importantFindings.length} notable signal${importantFindings.length === 1 ? '' : 's'} surfaced from console and network evidence.`
-          : 'No obvious runtime failure surfaced; the screenshot and annotations remain the primary evidence.',
-        chromeDebugger
-          ? friendlyDebuggerMessage
-            ? `Chrome-only details were limited for this clip: ${friendlyDebuggerMessage}`
-            : `Chrome debugger snapshot included ${chromeDebugger.logs.length} logs and ${chromeDebugger.network.length} requests.`
-          : 'No Chrome debugger snapshot is attached to this clip.',
-      ].forEach((line) => {
-        const item = document.createElement('div');
-        item.style.padding = '12px 14px';
-        item.style.borderRadius = '14px';
-        item.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-        item.style.background = 'rgba(255, 255, 255, 0.035)';
-        item.style.color = '#d8e3f2';
-        item.style.fontSize = '13px';
-        item.style.lineHeight = '1.5';
-        item.textContent = line;
-        aiChecklist.append(item);
-      });
-      aiCard.append(aiChecklist);
-
       const debugTabs = document.createElement('div');
       debugTabs.style.display = 'flex';
       debugTabs.style.alignItems = 'center';
-      debugTabs.style.gap = '8px';
-      debugTabs.style.flexWrap = 'wrap';
+      debugTabs.style.gap = '2px';
+      debugTabs.style.flexWrap = 'nowrap';
+      debugTabs.style.overflowX = 'auto';
+      debugTabs.style.paddingBottom = '6px';
+      debugTabs.style.borderBottom = '1px solid rgba(157, 177, 207, 0.12)';
       debugTabs.setAttribute('role', 'tablist');
       debugTabs.setAttribute('aria-label', 'Debug inspector tabs');
 
@@ -2266,6 +2034,20 @@ function mountClipOverlay(
       debugPanel.style.alignContent = 'start';
       debugPanel.style.gap = '14px';
       debugPanel.style.minHeight = '0';
+      debugPanel.style.overflowY = 'auto';
+      debugPanel.style.paddingRight = '4px';
+
+      const debugRail = document.createElement('section');
+      debugRail.style.display = 'grid';
+      debugRail.style.gridTemplateRows = 'auto auto minmax(0, 1fr)';
+      debugRail.style.gap = '12px';
+      debugRail.style.minHeight = '0';
+
+      const debugShell = document.createElement('div');
+      debugShell.style.display = 'grid';
+      debugShell.style.gridTemplateColumns = 'minmax(0, 1.12fr) minmax(560px, 680px)';
+      debugShell.style.gap = '18px';
+      debugShell.style.minHeight = '0';
 
       const debugTabButtons = new Map<DebugInspectorTab, HTMLButtonElement>();
       const debugTabConfig: Array<{ key: DebugInspectorTab; label: string }> = [
@@ -2275,20 +2057,20 @@ function mountClipOverlay(
         { key: 'actions', label: 'Actions' },
         { key: 'ai', label: 'AI' },
       ];
-      let activeDebugTab: DebugInspectorTab = 'info';
+      let activeDebugTab: DebugInspectorTab = 'network';
 
       const getDebugTabNodes = (tab: DebugInspectorTab) => {
         switch (tab) {
           case 'info':
-            return [debugTopGrid, overviewStrip, importantCard, pageContextCard, technicalDetails];
+            return [infoSummaryCard];
           case 'console':
-            return [overviewStrip, consoleCard, consoleDetailCard, chromeLogCard];
+            return [consoleDetailCard, chromeLogCard];
           case 'network':
-            return [overviewStrip, networkCard, runtimeNetworkCard, chromeNetworkCard];
+            return [networkFocusCard, chromeNetworkCard, runtimeNetworkCard];
           case 'actions':
-            return [overviewStrip, actionTimelineCard];
+            return [actionTimelineCard];
           case 'ai':
-            return [promptSummaryCard, aiCard, importantCard];
+            return [promptSummaryCard];
         }
       };
 
@@ -2297,10 +2079,11 @@ function mountClipOverlay(
           const active = key === activeDebugTab;
           button.setAttribute('aria-selected', active ? 'true' : 'false');
           button.tabIndex = active ? 0 : -1;
-          button.style.background = active ? 'rgba(103, 209, 255, 0.16)' : 'rgba(255,255,255,0.04)';
-          button.style.borderColor = active ? 'rgba(103, 209, 255, 0.45)' : 'rgba(157, 177, 207, 0.14)';
-          button.style.color = active ? '#eef7ff' : '#9db2cf';
+          button.style.background = 'transparent';
+          button.style.borderColor = 'transparent';
+          button.style.color = active ? '#eef7ff' : '#8ea6c5';
           button.style.boxShadow = active ? 'inset 0 -2px 0 rgba(103, 209, 255, 0.72)' : 'none';
+          button.style.opacity = active ? '1' : '0.88';
         });
 
         debugPanel.replaceChildren(...getDebugTabNodes(activeDebugTab));
@@ -2317,16 +2100,17 @@ function mountClipOverlay(
         button.textContent = label;
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-controls', 'snapclip-debug-panel');
-        button.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-        button.style.borderRadius = '999px';
-        button.style.padding = '10px 14px';
+        button.style.border = '1px solid transparent';
+        button.style.borderRadius = '0';
+        button.style.padding = '12px 16px 10px';
         button.style.minHeight = '40px';
-        button.style.background = 'rgba(255,255,255,0.04)';
-        button.style.color = '#9db2cf';
+        button.style.background = 'transparent';
+        button.style.color = '#8ea6c5';
         button.style.font = 'inherit';
-        button.style.fontSize = '13px';
+        button.style.fontSize = '14px';
         button.style.fontWeight = '700';
         button.style.cursor = 'pointer';
+        button.style.flex = '0 0 auto';
         button.addEventListener('click', () => activateDebugTab(key));
         button.addEventListener('keydown', (event) => {
           if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') {
@@ -2349,7 +2133,9 @@ function mountClipOverlay(
       debugPanel.setAttribute('role', 'tabpanel');
       debugPanel.setAttribute('aria-label', 'Debug inspector content');
       debugWorkspace.style.gridColumn = '1 / -1';
-      debugWorkspace.append(detailsHead, debugTabs, debugPanel);
+      debugRail.append(overviewStrip, debugTabs, debugPanel);
+      debugShell.append(debugPreviewCard, debugRail);
+      debugWorkspace.append(detailsHead, debugShell);
       renderDebugTab();
 
       const scrollbarStyle = document.createElement('style');
@@ -3230,23 +3016,23 @@ function mountClipOverlay(
 
       type OverlayBridgeSession = {
         id: string;
+        workspaceId: string;
+        workspaceName?: string | null;
         label: string;
         pendingApprovalCount?: number;
       };
 
       const claudeSessionSurfaces: Array<{
-        mode: 'rail' | 'debug';
+        mode: 'rail';
         root: HTMLDivElement;
-      }> = [
-        { mode: 'rail', root: claudeRailStrip },
-        { mode: 'debug', root: claudeDebugStrip },
-      ];
+      }> = [{ mode: 'rail', root: claudeRailStrip }];
       let bridgeWorkspaces: OverlayBridgeWorkspace[] = [];
       let bridgeSessions: OverlayBridgeSession[] = [];
       let selectedWorkspaceId = '';
       let selectedClaudeSessionId = '';
       let bridgeStatusMessage = '';
       let bridgeStatusTone: 'default' | 'success' | 'error' = 'default';
+      let bridgeDiscoveryMode: 'workspace' | 'active' = 'workspace';
       let isBridgeLoading = false;
       let isBridgeSending = false;
       let activeClaudeSessionId = '';
@@ -3375,7 +3161,7 @@ function mountClipOverlay(
           controls.style.gap = '8px';
           controls.style.flexWrap = 'wrap';
 
-          if (bridgeWorkspaces.length > 1) {
+          if (bridgeDiscoveryMode === 'workspace' && bridgeWorkspaces.length > 1) {
             const workspaceSelect = document.createElement('select');
             workspaceSelect.value = selectedWorkspaceId;
             workspaceSelect.disabled = isBridgeLoading || isBridgeSending;
@@ -3398,7 +3184,7 @@ function mountClipOverlay(
               void changeBridgeWorkspace(workspaceSelect.value);
             });
             controls.append(workspaceSelect);
-          } else if (bridgeWorkspaces.length === 1) {
+          } else if (bridgeDiscoveryMode === 'workspace' && bridgeWorkspaces.length === 1) {
             const workspacePill = document.createElement('div');
             workspacePill.textContent = bridgeWorkspaces[0]!.name;
             workspacePill.style.padding = '8px 10px';
@@ -3471,7 +3257,9 @@ function mountClipOverlay(
             const empty = document.createElement('div');
             empty.textContent = isBridgeLoading
               ? 'Loading live Claude sessions...'
-              : selectedWorkspaceId
+              : bridgeDiscoveryMode === 'active'
+                ? 'No live Claude sessions were found on the local bridge.'
+                : selectedWorkspaceId
                 ? 'No live Claude sessions in this workspace yet.'
                 : bridgeWorkspaces.length
                   ? 'Pick a workspace to load live Claude sessions.'
@@ -3491,7 +3279,9 @@ function mountClipOverlay(
           status.style.lineHeight = '1.45';
           status.textContent =
             bridgeStatusMessage ||
-            (bridgeWorkspaces.length
+            (bridgeDiscoveryMode === 'active'
+              ? 'Live sessions were discovered directly from the local bridge.'
+              : bridgeWorkspaces.length
               ? 'Live sessions are discovered through the local bridge and stay local unless you send them.'
               : 'Start the local bridge and Claude hooks to enable direct send.');
           styleClaudeStatus(status, bridgeStatusTone);
@@ -3521,6 +3311,61 @@ function mountClipOverlay(
         try {
           const storedSelection = await readStoredBridgeSelection();
 
+          if (reloadWorkspaces || bridgeSessions.length === 0) {
+            const activeSessionResponse = await chrome.runtime.sendMessage({
+              type: 'get-bridge-active-sessions',
+            });
+
+            if (activeSessionResponse?.ok) {
+              const activeSessions = (activeSessionResponse.sessions ?? []).map((session: {
+                id: string;
+                workspaceId: string;
+                workspaceName?: string | null;
+                label: string;
+                pendingApprovalCount?: number;
+              }) => ({
+                id: session.id,
+                workspaceId: session.workspaceId,
+                workspaceName: session.workspaceName ?? null,
+                label: session.label,
+                pendingApprovalCount: session.pendingApprovalCount,
+              }));
+
+              if (requestToken !== bridgeRequestToken) {
+                return;
+              }
+
+              bridgeDiscoveryMode = 'active';
+              bridgeSessions = activeSessions;
+              const activeWorkspaceMap = new Map<string, OverlayBridgeWorkspace>();
+              activeSessions.forEach((session: OverlayBridgeSession) => {
+                const existing = activeWorkspaceMap.get(session.workspaceId);
+                if (existing) {
+                  existing.sessionCount += 1;
+                  return;
+                }
+
+                activeWorkspaceMap.set(session.workspaceId, {
+                  id: session.workspaceId,
+                  name: session.workspaceName || session.workspaceId,
+                  sessionCount: 1,
+                });
+              });
+              bridgeWorkspaces = Array.from(activeWorkspaceMap.values());
+              selectedClaudeSessionId = pickSessionId(
+                bridgeSessions,
+                selectedClaudeSessionId || storedSelection.sessionId,
+              );
+              selectedWorkspaceId =
+                bridgeSessions.find((session) => session.id === selectedClaudeSessionId)?.workspaceId ||
+                bridgeSessions[0]?.workspaceId ||
+                storedSelection.workspaceId ||
+                '';
+              await persistBridgeSelection(selectedWorkspaceId, selectedClaudeSessionId);
+              return;
+            }
+          }
+
           if (reloadWorkspaces || bridgeWorkspaces.length === 0) {
             const workspaceResponse = await chrome.runtime.sendMessage({
               type: 'get-bridge-workspaces',
@@ -3543,6 +3388,7 @@ function mountClipOverlay(
               name: workspace.name,
               sessionCount: workspace.sessionCount,
             }));
+            bridgeDiscoveryMode = 'workspace';
 
             selectedWorkspaceId = pickWorkspaceId(
               bridgeWorkspaces,
@@ -3575,10 +3421,14 @@ function mountClipOverlay(
 
           bridgeSessions = (sessionResponse.sessions ?? []).map((session: {
             id: string;
+            workspaceId?: string;
+            workspaceName?: string | null;
             label: string;
             pendingApprovalCount?: number;
           }) => ({
             id: session.id,
+            workspaceId: session.workspaceId || selectedWorkspaceId,
+            workspaceName: session.workspaceName ?? null,
             label: session.label,
             pendingApprovalCount: session.pendingApprovalCount,
           }));
@@ -3602,7 +3452,11 @@ function mountClipOverlay(
       };
 
       const sendToClaudeSession = async (targetSession: OverlayBridgeSession) => {
-        if (!selectedWorkspaceId || isBridgeSending) {
+        if (isBridgeSending) {
+          return;
+        }
+
+        if (!targetSession.workspaceId && !selectedWorkspaceId) {
           return;
         }
 
@@ -3610,6 +3464,7 @@ function mountClipOverlay(
         activeClaudeSessionId = targetSession.id;
         successfulClaudeSessionId = '';
         selectedClaudeSessionId = targetSession.id;
+        selectedWorkspaceId = targetSession.workspaceId || selectedWorkspaceId;
         bridgeStatusMessage = `Sending to ${targetSession.label}...`;
         bridgeStatusTone = 'default';
         renderClaudeSessionSurfaces();
