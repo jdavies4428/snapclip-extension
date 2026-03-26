@@ -499,6 +499,95 @@ Make evidence useful, bounded, trustworthy, and easier to inspect through focuse
 - add short explanations of evidence profiles
 - keep evidence cards readable for designers and engineers
 
+### Reviewed implementation plan
+
+Implement the Jam-inspired debugger upgrade as one bounded evidence rail, not as a general-purpose browser debugger.
+
+V1 tabs:
+- `Info`
+- `Console`
+- `Network`
+- `Actions`
+- `AI`
+
+Out of scope for this implementation:
+- backend/server correlation
+- HAR parity
+- request/response body persistence by default
+- replay reconstruction beyond current bounded evidence
+- new capture permissions
+
+Architecture rule:
+- reuse existing `runtimeContext` and `chromeDebugger`
+- add one normalized action model
+- keep the clip as the hero and the rail as the interpreter
+
+Rail architecture:
+
+```text
++------------------------------------------------------+
+| Clip / screenshot / replay                           |
+|                                                      |
+| evidence-first visual source of truth                |
++-----------------------------------+------------------+
+| Info  Console  Network  Actions AI| active tab       |
+|                                   |                  |
+|                                   | focused evidence |
+|                                   |                  |
++-----------------------------------+------------------+
+```
+
+Evidence flow:
+
+```text
+[runtimeContext]      [chromeDebugger]
+      |                     |
+      +----------+----------+
+                 |
+                 v
+       [normalized rail model]
+                 |
+      +----------+----------+----------+----------+
+      |          |          |          |          |
+      v          v          v          v          v
+    Info      Console    Network    Actions       AI
+```
+
+Actions normalization:
+
+```text
+route_change ------------------+
+failed request ----------------+--> [normalizeActionEvents] --> [Actions tab]
+slow request ------------------+
+console error/warn ------------+
+capture timestamp -------------+
+```
+
+Execution stages:
+
+1. Stage 1: rail shell and tab architecture
+   - build one persistent debugger rail in the side panel
+   - move the current deep network inspector under `Network`
+   - add keyboard-friendly tab state and empty-state handling
+2. Stage 2: `Info` and `Console`
+   - render page metadata, capture metadata, debugger summary, runtime errors, warnings, and Chrome logs
+   - remove duplicate evidence blocks outside the rail
+3. Stage 3: `Actions`
+   - add a normalized `ActionEvent` model
+   - render a bounded readable timeline from route/runtime/network signals
+4. Stage 4: `AI`
+   - add a compact AI interpretation tab using prompt/note + evidence summary
+   - keep it local-first and deterministic
+5. Stage 5: cleanup and export alignment
+   - ensure exports and prompts reflect the new rail structure
+   - ensure redaction/truncation stays centralized
+
+Stage gates:
+- do not advance until review and QA pass
+- each stage must pass `npm run typecheck`
+- each stage must pass `npm run build`
+- each stage must preserve local-first trust copy and bounded-capture honesty
+
 ### Backend / architecture work
 
 - treat bounded runtime context as its own stable schema

@@ -14,7 +14,12 @@ import type {
   ClipRecord,
   ClipSession,
 } from '../shared/types/session';
-import { describeEvidenceProfile, type EvidenceProfile } from '../shared/export/evidence';
+import {
+  buildActionTimeline,
+  describeEvidenceProfile,
+  normalizeClipForEvidence,
+  type EvidenceProfile,
+} from '../shared/export/evidence';
 import { createClipSessionMarkdown } from '../shared/export/session-markdown';
 import { getClipAssetBlob } from '../shared/storage/blob-store';
 import { useClipAssetUrl } from './state/useClipAssetUrl';
@@ -24,6 +29,43 @@ import { useClipSession } from './state/useClipSession';
 
 type HandoffScope = 'active_clip' | 'session';
 type DebuggerInspectorTab = 'headers' | 'request' | 'response';
+type DebuggerRailTab = 'info' | 'console' | 'network' | 'actions' | 'ai';
+
+const DEBUGGER_RAIL_TABS: Array<{
+  id: DebuggerRailTab;
+  label: string;
+  description: string;
+  enabled: boolean;
+}> = [
+  { id: 'info', label: 'Info', description: 'page and capture context', enabled: true },
+  { id: 'console', label: 'Console', description: 'runtime and debugger logs', enabled: true },
+  { id: 'network', label: 'Network', description: 'request evidence and details', enabled: true },
+  { id: 'actions', label: 'Actions', description: 'captured user flow', enabled: true },
+  { id: 'ai', label: 'AI', description: 'handoff and analysis', enabled: true },
+];
+
+function EvidenceRailEmptyState({
+  eyebrow,
+  title,
+  copy,
+  note,
+}: {
+  eyebrow: string;
+  title: string;
+  copy: string;
+  note?: string;
+}) {
+  return (
+    <section className="debugger-rail-empty">
+      <div className="debugger-rail-empty-copy">
+        <p className="eyebrow">{eyebrow}</p>
+        <h3>{title}</h3>
+        <p>{copy}</p>
+      </div>
+      {note ? <p className="debugger-rail-empty-note">{note}</p> : null}
+    </section>
+  );
+}
 
 function getHandoffStatusMessage(task: BridgeTask, pendingApprovalCount: number) {
   if (task.delivery.state === 'queued') {
@@ -84,6 +126,91 @@ function formatRequestLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function formatClipTimestamp(timestamp: string): string {
+  return new Date(timestamp).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatBrowserLabel(userAgent: string): string {
+  const patterns: Array<[RegExp, string]> = [
+    [/Edg\/([\d.]+)/, 'Edge'],
+    [/Chrome\/([\d.]+)/, 'Chrome'],
+    [/Firefox\/([\d.]+)/, 'Firefox'],
+    [/Version\/([\d.]+).*Safari\//, 'Safari'],
+  ];
+
+  for (const [pattern, label] of patterns) {
+    const match = userAgent.match(pattern);
+    if (match) {
+      return `${label} ${match[1].split('.').slice(0, 2).join('.')}`;
+    }
+  }
+
+  return 'Browser unavailable';
+}
+
+function getLogTonePriority(level: string): number {
+  if (level === 'error' || level === 'assert') {
+    return 0;
+  }
+
+  if (level === 'warning' || level === 'warn') {
+    return 1;
+  }
+
+  return 2;
+}
+
+function buildAiNextChecks(
+  clip: {
+    note: string;
+    runtimeContext: ClipRecord['runtimeContext'];
+  },
+  actionTimelineLength: number,
+): string[] {
+  const checks: string[] = [];
+  const runtimeSummary = clip.runtimeContext?.summary;
+  const chromeDebugger = clip.runtimeContext?.chromeDebugger;
+
+  if (runtimeSummary?.failedRequestCount) {
+    checks.push('Start with the failing requests in the Network tab and compare them to the last captured route change.');
+  }
+
+  if (runtimeSummary?.errorCount) {
+    checks.push('Compare the Console tab errors with the route and request sequence to see whether the UI break follows navigation or a request failure.');
+  }
+
+  if (chromeDebugger?.attachError) {
+    checks.push('Chrome deep network details were unavailable for this page, so rely on runtime evidence or capture again after reproducing the issue.');
+  }
+
+  if (!actionTimelineLength) {
+    checks.push('Reproduce once with navigation or a user flow so the Actions tab can retain a clearer sequence.');
+  }
+
+  if (!clip.note.trim()) {
+    checks.push('Add a short agent prompt from Edit on page so the handoff has a concrete debugging goal.');
+  }
+
+  if (!checks.length) {
+    checks.push('Review Network first, then Console, then use the prompt below to hand the packet to your agent with the smallest missing context.');
+  }
+
+  return checks.slice(0, 4);
+}
+
+function formatActionTimestamp(timestamp: string): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function formatEncodedBytes(bytes: number | null | undefined): string {
@@ -185,7 +312,11 @@ function DebuggerNetworkInspector({
             ? (currentIndex + 1) % tabOrder.length
             : (currentIndex - 1 + tabOrder.length) % tabOrder.length;
 
-    onTabChange(tabOrder[nextIndex]);
+    const nextTab = tabOrder[nextIndex];
+    onTabChange(nextTab);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`debugger-tab-${selectedRequest.id}-${nextTab}`)?.focus();
+    });
   };
 
   return (
@@ -605,6 +736,7 @@ export default function App() {
   const [evidenceProfile, setEvidenceProfile] = useState<EvidenceProfile>('balanced');
   const [selectedDebuggerRequestId, setSelectedDebuggerRequestId] = useState<string | null>(null);
   const [activeDebuggerInspectorTab, setActiveDebuggerInspectorTab] = useState<DebuggerInspectorTab>('headers');
+  const [activeDebuggerRailTab, setActiveDebuggerRailTab] = useState<DebuggerRailTab>('info');
   const [activeOverlayTabId, setActiveOverlayTabId] = useState<number | null>(null);
   const bridgeReloadKey = session ? `${session.id}:${session.clips.length}` : 'no-session';
   const {
@@ -659,8 +791,46 @@ export default function App() {
   const activeClipImageUrl = useClipAssetUrl(activeClip?.imageAssetId ?? null);
   const activeClipHost = useMemo(() => (activeClip ? getHostLabel(activeClip.page.url) : ''), [activeClip]);
   const runtimeSummary = activeClip?.runtimeContext?.summary ?? null;
+  const runtimeEvents = activeClip?.runtimeContext?.events ?? [];
+  const runtimeConsoleEvents = runtimeEvents.filter((event) => event.type !== 'route_change');
   const chromeDebugger = activeClip?.runtimeContext?.chromeDebugger ?? null;
+  const sortedRuntimeConsoleEvents = [...runtimeConsoleEvents].sort((left, right) => {
+    const priorityDelta = getLogTonePriority(left.level) - getLogTonePriority(right.level);
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime();
+  });
+  const sortedChromeLogs = [...(chromeDebugger?.logs ?? [])].sort((left, right) => {
+    const priorityDelta = getLogTonePriority(left.level) - getLogTonePriority(right.level);
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return new Date(right.timestamp ?? 0).getTime() - new Date(left.timestamp ?? 0).getTime();
+  });
+  const consoleEventCounts = {
+    runtimeErrors: runtimeConsoleEvents.filter((event) => event.level === 'error').length,
+    runtimeWarnings: runtimeConsoleEvents.filter((event) => event.level === 'warn').length,
+    runtimeLogs: runtimeConsoleEvents.filter((event) => event.level === 'log').length,
+    chromeErrors: (chromeDebugger?.logs ?? []).filter((entry) => entry.level === 'error' || entry.level === 'assert')
+      .length,
+    chromeWarnings: (chromeDebugger?.logs ?? []).filter((entry) => entry.level === 'warning' || entry.level === 'warn')
+      .length,
+    chromeLogs: (chromeDebugger?.logs ?? []).filter(
+      (entry) => entry.level !== 'error' && entry.level !== 'assert' && entry.level !== 'warning' && entry.level !== 'warn',
+    ).length,
+  };
+  const evidenceClip = activeClip ? normalizeClipForEvidence(activeClip, evidenceProfile) : null;
+  const evidenceRuntimeSummary = evidenceClip?.runtimeContext?.summary ?? null;
+  const actionTimeline = evidenceClip ? buildActionTimeline(evidenceClip) : [];
+  const aiNextChecks = evidenceClip ? buildAiNextChecks(evidenceClip, actionTimeline.length) : [];
   const selectedText = activeClip?.domSummary.selectedText?.trim() ?? '';
+  const activeDebuggerRailTabMeta =
+    DEBUGGER_RAIL_TABS.find((tab) => tab.id === activeDebuggerRailTab) ?? DEBUGGER_RAIL_TABS[0];
+  const debuggerRailTabOrder = DEBUGGER_RAIL_TABS.filter((tab) => tab.enabled).map((tab) => tab.id);
+  const debuggerRailPanelId = 'debugger-rail-panel';
   const selectedWorkspace = bridgeWorkspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
   const selectedBridgeSession = bridgeSessions.find((entry) => entry.id === selectedSessionId) ?? null;
   const handoffSummary = handoffTask
@@ -741,6 +911,15 @@ export default function App() {
     setSelectedDebuggerRequestId(null);
     setActiveDebuggerInspectorTab('headers');
   }, [activeClip?.id, activeClip?.note, activeClip?.title]);
+
+  useEffect(() => {
+    const activeTab = DEBUGGER_RAIL_TABS.find((tab) => tab.id === activeDebuggerRailTab);
+    if (activeTab?.enabled !== false) {
+      return;
+    }
+
+    setActiveDebuggerRailTab('info');
+  }, [activeDebuggerRailTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -996,7 +1175,7 @@ export default function App() {
 
   async function copySessionReport(currentSession: ClipSession) {
     try {
-      await copyTextToClipboard(createClipSessionMarkdown(currentSession));
+      await copyTextToClipboard(createClipSessionMarkdown(currentSession, evidenceProfile));
       setStatus('Session report copied to the clipboard.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Clipboard copy failed.');
@@ -1198,6 +1377,473 @@ export default function App() {
       window.clearTimeout(timeoutId);
     };
   }, [activeClip, draftNote]);
+
+  const handleDebuggerRailTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, tab: DebuggerRailTab) => {
+    const currentIndex = debuggerRailTabOrder.indexOf(tab);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+    } else {
+      return;
+    }
+
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? debuggerRailTabOrder.length - 1
+          : event.key === 'ArrowRight'
+            ? (currentIndex + 1) % debuggerRailTabOrder.length
+            : (currentIndex - 1 + debuggerRailTabOrder.length) % debuggerRailTabOrder.length;
+
+    const nextTab = debuggerRailTabOrder[nextIndex];
+    setActiveDebuggerRailTab(nextTab);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`debugger-rail-tab-${nextTab}`)?.focus();
+    });
+  };
+
+  function renderDebuggerRailTabContent() {
+    if (!activeClip) {
+      return (
+        <EvidenceRailEmptyState
+          eyebrow="No clip"
+          title="Capture a clip first"
+          copy="The debugger rail appears once the active clip is available, so the evidence stays tied to the current browser state."
+          note="Stored locally until you export or send a bundle."
+        />
+      );
+    }
+
+    switch (activeDebuggerRailTab) {
+      case 'info':
+        return (
+          <div className="debugger-rail-stack">
+            <section className="debugger-rail-section">
+              <div className="section-head section-head-compact">
+                <div>
+                  <p className="panel-disclosure-label">Info</p>
+                  <h3>Clip and page context</h3>
+                </div>
+                <span className="context-card-badge">
+                  {runtimeSummary ? `${runtimeSummary.eventCount} runtime events` : 'No runtime summary'}
+                </span>
+              </div>
+
+              <p className={`context-summary-line ${selectedText ? '' : 'context-summary-line-muted'}`}>
+                {selectedText || 'No selected text was captured for this clip.'}
+              </p>
+
+              <div className="debugger-rail-metric-grid">
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{formatClipTimestamp(activeClip.createdAt)}</span>
+                  <span className="debugger-rail-metric-label">captured</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{formatBrowserLabel(activeClip.page.userAgent)}</span>
+                  <span className="debugger-rail-metric-label">browser</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">
+                    {activeClip.page.viewport.width} x {activeClip.page.viewport.height}
+                  </span>
+                  <span className="debugger-rail-metric-label">viewport</span>
+                </div>
+              </div>
+
+              <dl className="meta-grid meta-grid-compact">
+                <div>
+                  <dt>Page</dt>
+                  <dd>{activeClip.page.url}</dd>
+                </div>
+                <div>
+                  <dt>Host</dt>
+                  <dd>{activeClipHost || 'n/a'}</dd>
+                </div>
+                <div>
+                  <dt>Time zone</dt>
+                  <dd>{activeClip.page.timeZone}</dd>
+                </div>
+                <div>
+                  <dt>Platform</dt>
+                  <dd>{activeClip.page.platform}</dd>
+                </div>
+                <div>
+                  <dt>Language</dt>
+                  <dd>{activeClip.page.language}</dd>
+                </div>
+                <div>
+                  <dt>Debugger</dt>
+                  <dd>{chromeDebugger?.attachError || 'Captured locally'}</dd>
+                </div>
+              </dl>
+            </section>
+
+            {activeClip.domSummary.headings.length ? (
+              <section className="debugger-rail-section">
+                <p className="panel-disclosure-label">Visible headings</p>
+                <ul className="pill-list">
+                  {activeClip.domSummary.headings.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {activeClip.runtimeContext?.domSummary ? (
+              <section className="debugger-rail-section">
+                <p className="panel-disclosure-label">Visible page summary</p>
+                <div className="dom-summary-grid">
+                  <div>
+                    <dt>Path</dt>
+                    <dd>{activeClip.runtimeContext.domSummary.path}</dd>
+                  </div>
+                  <div>
+                    <dt>Headings</dt>
+                    <dd>{activeClip.runtimeContext.domSummary.headingTexts.join(', ') || 'None captured'}</dd>
+                  </div>
+                  <div>
+                    <dt>Buttons</dt>
+                    <dd>{activeClip.runtimeContext.domSummary.buttonTexts.join(', ') || 'None captured'}</dd>
+                  </div>
+                  <div>
+                    <dt>Fields</dt>
+                    <dd>{activeClip.runtimeContext.domSummary.inputLabels.join(', ') || 'None captured'}</dd>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {chromeDebugger ? (
+              <section className="debugger-rail-section">
+                <p className="panel-disclosure-label">Debugger snapshot</p>
+                <dl className="meta-grid meta-grid-compact">
+                  <div>
+                    <dt>Frames</dt>
+                    <dd>{chromeDebugger.frameCount}</dd>
+                  </div>
+                  <div>
+                    <dt>DOM nodes</dt>
+                    <dd>
+                      {typeof chromeDebugger.performance.nodes === 'number'
+                        ? chromeDebugger.performance.nodes.toLocaleString()
+                        : 'n/a'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Heap used</dt>
+                    <dd>
+                      {typeof chromeDebugger.performance.jsHeapUsedSize === 'number'
+                        ? `${Math.round(chromeDebugger.performance.jsHeapUsedSize / 1024).toLocaleString()} KB`
+                        : 'n/a'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Chrome logs</dt>
+                    <dd>{chromeDebugger.logs.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Chrome requests</dt>
+                    <dd>{chromeDebugger.network.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Capture</dt>
+                    <dd>{chromeDebugger.attachError || 'Bounded local snapshot'}</dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
+          </div>
+        );
+
+      case 'console':
+        return sortedRuntimeConsoleEvents.length || sortedChromeLogs.length ? (
+          <div className="debugger-rail-stack">
+            <section className="debugger-rail-section">
+              <div className="section-head section-head-compact">
+                <div>
+                  <p className="panel-disclosure-label">Diagnostics</p>
+                  <h3>Severity snapshot</h3>
+                </div>
+                <span className="context-card-badge">{sortedRuntimeConsoleEvents.length + sortedChromeLogs.length} retained</span>
+              </div>
+              <div className="debugger-rail-metric-grid">
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{consoleEventCounts.runtimeErrors + consoleEventCounts.chromeErrors}</span>
+                  <span className="debugger-rail-metric-label">errors</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">
+                    {consoleEventCounts.runtimeWarnings + consoleEventCounts.chromeWarnings}
+                  </span>
+                  <span className="debugger-rail-metric-label">warnings</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{consoleEventCounts.runtimeLogs + consoleEventCounts.chromeLogs}</span>
+                  <span className="debugger-rail-metric-label">logs</span>
+                </div>
+              </div>
+            </section>
+
+            {sortedRuntimeConsoleEvents.length ? (
+              <section className="debugger-rail-section">
+                <div className="section-head section-head-compact">
+                  <div>
+                    <p className="panel-disclosure-label">Runtime events</p>
+                    <h3>Console summary</h3>
+                  </div>
+                  <span className="context-card-badge">
+                    {sortedRuntimeConsoleEvents.length} event{sortedRuntimeConsoleEvents.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <p className="debugger-rail-note">
+                  App-level exceptions, warnings, and logs captured from the page runtime. Navigation changes are reserved for the Actions tab.
+                </p>
+                <div className="runtime-event-list">
+                  {sortedRuntimeConsoleEvents.map((event) => (
+                    <article
+                      className={`runtime-event runtime-event-${event.level}`}
+                      key={`${event.timestamp}-${event.type}-${event.message}`}
+                    >
+                      <div className="runtime-event-head">
+                        <span className="runtime-event-badge">{event.type.replaceAll('_', ' ')}</span>
+                        <time>{new Date(event.timestamp).toLocaleTimeString()}</time>
+                      </div>
+                      <p>{event.message}</p>
+                      {event.source ? <code>{event.source}</code> : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {sortedChromeLogs.length ? (
+              <section className="debugger-rail-section">
+                <div className="section-head section-head-compact">
+                  <div>
+                    <p className="panel-disclosure-label">Chrome logs</p>
+                    <h3>Debugger output</h3>
+                  </div>
+                  <span className="context-card-badge">{sortedChromeLogs.length} entries</span>
+                </div>
+                <p className="debugger-rail-note">
+                  Chrome debugger output is useful when the page runtime is quiet but the browser still sees warnings or protocol-level errors.
+                </p>
+                <div className="runtime-event-list">
+                  {sortedChromeLogs.map((entry, index) => (
+                    <article
+                      className={`runtime-event runtime-event-${
+                        entry.level === 'error'
+                          ? 'error'
+                          : entry.level === 'warning' || entry.level === 'warn'
+                            ? 'warn'
+                            : 'log'
+                      }`}
+                      key={`${entry.timestamp ?? index}-${entry.source}-${entry.text}`}
+                    >
+                      <div className="runtime-event-head">
+                        <span className="runtime-event-badge">
+                          {entry.source} {entry.level}
+                        </span>
+                        <time>{entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'snapshot'}</time>
+                      </div>
+                      <p>{entry.text}</p>
+                      {entry.url ? <code>{entry.url}</code> : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : (
+          <EvidenceRailEmptyState
+            eyebrow="Console"
+            title="No runtime console signals"
+            copy="Console logs and runtime events will show up here once this clip captures them."
+            note="The evidence rail still keeps the network and clip context available above."
+          />
+        );
+
+      case 'network':
+        return activeClip.runtimeContext?.network.length || chromeDebugger ? (
+          <div className="debugger-rail-stack">
+            {activeClip.runtimeContext?.network.length ? (
+              <section className="debugger-rail-section">
+                <div className="section-head section-head-compact">
+                  <div>
+                    <p className="panel-disclosure-label">Runtime requests</p>
+                    <h3>Network activity</h3>
+                  </div>
+                  <span className="context-card-badge">
+                    {activeClip.runtimeContext.network.length} request{activeClip.runtimeContext.network.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="runtime-event-list">
+                  {activeClip.runtimeContext.network.map((request) => (
+                    <article
+                      className={`runtime-event runtime-event-${
+                        request.classification === 'failed'
+                          ? 'error'
+                          : request.classification === 'slow'
+                            ? 'warn'
+                            : 'log'
+                      }`}
+                      key={request.id}
+                    >
+                      <div className="runtime-event-head">
+                        <span className="runtime-event-badge">
+                          {request.transport} {request.method}
+                        </span>
+                        <time>{request.durationMs}ms</time>
+                      </div>
+                      <p>{request.url}</p>
+                      <code>
+                        status {request.status === null ? 'no-status' : request.status} · {request.classification}
+                      </code>
+                      {request.error ? <code>{request.error}</code> : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {chromeDebugger ? (
+              <DebuggerNetworkInspector
+                activeTab={activeDebuggerInspectorTab}
+                onSelectRequest={setSelectedDebuggerRequestId}
+                onTabChange={setActiveDebuggerInspectorTab}
+                selectedRequestId={selectedDebuggerRequestId}
+                snapshot={chromeDebugger}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <EvidenceRailEmptyState
+            eyebrow="Network"
+            title="No captured requests"
+            copy="This clip did not retain a network trace yet. Capture the page again to bring the request list and deep inspector back."
+            note="The rail still stays in place, so the clip and its context do not jump around."
+          />
+        );
+
+      case 'actions':
+        return actionTimeline.length ? (
+          <div className="debugger-rail-stack">
+            <section className="debugger-rail-section">
+              <div className="section-head section-head-compact">
+                <div>
+                  <p className="panel-disclosure-label">Actions</p>
+                  <h3>Captured flow</h3>
+                </div>
+                <span className="context-card-badge">{actionTimeline.length} events</span>
+              </div>
+              <div className="debugger-rail-metric-grid">
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">
+                    {actionTimeline.filter((entry) => entry.kind === 'route').length}
+                  </span>
+                  <span className="debugger-rail-metric-label">route changes</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">
+                    {actionTimeline.filter((entry) => entry.kind === 'request_failed').length}
+                  </span>
+                  <span className="debugger-rail-metric-label">failed requests</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">
+                    {actionTimeline.filter((entry) => entry.kind === 'request_slow').length}
+                  </span>
+                  <span className="debugger-rail-metric-label">slow requests</span>
+                </div>
+              </div>
+              <p className="debugger-rail-note">
+                A bounded timeline built from route changes plus failed or slow requests captured during this clip.
+              </p>
+              {actionTimeline.length >= 12 ? (
+                <p className="debugger-rail-note">
+                  Showing the most recent bounded slice of the captured flow for this clip.
+                </p>
+              ) : null}
+            </section>
+
+            <section className="debugger-rail-section">
+              <div className="action-timeline" role="list" aria-label="Captured actions timeline">
+                {actionTimeline.map((entry) => (
+                  <article className={`action-timeline-entry action-timeline-entry-${entry.tone}`} key={entry.id} role="listitem">
+                    <div className="action-timeline-time">{formatActionTimestamp(entry.timestamp)}</div>
+                    <div className="action-timeline-copy">
+                      <p className="action-timeline-label">{entry.label}</p>
+                      <p className="action-timeline-detail">{entry.detail}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : (
+          <EvidenceRailEmptyState
+            eyebrow="Actions"
+            title="No timeline evidence yet"
+            copy="This clip did not retain enough route, request, or runtime signals to build a readable flow."
+            note="Capture again and reproduce once if the bug depends on navigation or a request sequence."
+          />
+        );
+
+      case 'ai':
+        return (
+          <div className="debugger-rail-stack">
+            <section className="debugger-rail-section">
+              <div className="section-head section-head-compact">
+                <div>
+                  <p className="panel-disclosure-label">AI handoff</p>
+                  <h3>Agent-ready packet</h3>
+                </div>
+                <span className="context-card-badge">{handoffTarget}</span>
+              </div>
+              <div className="debugger-rail-metric-grid">
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{evidenceProfile}</span>
+                  <span className="debugger-rail-metric-label">evidence profile</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{evidenceRuntimeSummary?.failedRequestCount ?? 0}</span>
+                  <span className="debugger-rail-metric-label">failed requests</span>
+                </div>
+                <div className="debugger-rail-metric">
+                  <span className="debugger-rail-metric-value">{actionTimeline.length}</span>
+                  <span className="debugger-rail-metric-label">timeline events</span>
+                </div>
+              </div>
+              <p className="debugger-rail-note">
+                The prompt, screenshot, and bounded evidence bundle stay local until you explicitly export or send them.
+              </p>
+            </section>
+
+            <section className="debugger-rail-section">
+              <p className="panel-disclosure-label">Prompt</p>
+              <div className={`prompt-preview ${draftNote.trim() ? '' : 'prompt-preview-empty'}`}>
+                {draftNote.trim() || 'No prompt yet. Use Edit on page to add instructions for the model.'}
+              </div>
+            </section>
+
+            <section className="debugger-rail-section">
+              <p className="panel-disclosure-label">Next checks</p>
+              <ul className="debugger-rail-checklist">
+                {aiNextChecks.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        );
+    }
+
+    return null;
+  }
 
   return (
     <main className="panel-shell">
@@ -1522,208 +2168,53 @@ export default function App() {
                   </details>
                 </section>
 
-                <section className="session-context-shell">
-                  <div className="section-head section-head-compact">
-                    <div>
-                      <p className="eyebrow">Captured context</p>
-                      <h2>Context</h2>
+                <section className="session-context-shell debugger-rail-shell">
+                  <div className="debugger-rail-head">
+                    <div className="section-head section-head-compact">
+                      <div className="debugger-rail-copy">
+                        <p className="eyebrow">Debugger rail</p>
+                        <h2>Captured evidence</h2>
+                        <p className="network-inspector-note">
+                          Persistent local snapshot for the active clip. Showing {activeDebuggerRailTabMeta.description}.
+                        </p>
+                      </div>
+                      <span className="context-card-badge">Local only</span>
                     </div>
-                    <span className="context-card-badge">
-                      {runtimeSummary ? `${runtimeSummary.eventCount} events` : 'Optional'}
-                    </span>
+
+                    <div className="debugger-rail-tabs" role="tablist" aria-label="Debugger rail tabs">
+                      {DEBUGGER_RAIL_TABS.map((tab) => (
+                        <button
+                          aria-controls={debuggerRailPanelId}
+                          aria-disabled={tab.enabled ? undefined : true}
+                          aria-selected={activeDebuggerRailTab === tab.id}
+                          className={`debugger-rail-tab ${activeDebuggerRailTab === tab.id ? 'debugger-rail-tab-active' : ''} ${
+                            tab.enabled ? '' : 'debugger-rail-tab-disabled'
+                          }`}
+                          disabled={!tab.enabled}
+                          id={`debugger-rail-tab-${tab.id}`}
+                          key={tab.id}
+                          onClick={() => setActiveDebuggerRailTab(tab.id)}
+                          onKeyDown={(event) => handleDebuggerRailTabKeyDown(event, tab.id)}
+                          role="tab"
+                          tabIndex={activeDebuggerRailTab === tab.id ? 0 : -1}
+                          title={tab.description}
+                          type="button"
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <p className={`context-summary-line ${selectedText ? '' : 'context-summary-line-muted'}`}>
-                    {selectedText || 'No selected text was captured for this clip.'}
-                  </p>
-
-                  <details className="panel-disclosure">
-                    <summary>Show details</summary>
-                    <div className="panel-disclosure-body">
-                      {activeClip.domSummary.headings.length ? (
-                        <div className="panel-disclosure-stack">
-                          <p className="panel-disclosure-label">Visible headings</p>
-                          <ul className="pill-list">
-                            {activeClip.domSummary.headings.map((item) => (
-                              <li key={item}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-
-                      <dl className="meta-grid meta-grid-compact">
-                        <div>
-                          <dt>Page</dt>
-                          <dd>{activeClip.page.url}</dd>
-                        </div>
-                        <div>
-                          <dt>Browser</dt>
-                          <dd>{activeClip.page.userAgent}</dd>
-                        </div>
-                        <div>
-                          <dt>Platform</dt>
-                          <dd>{activeClip.page.platform}</dd>
-                        </div>
-                        <div>
-                          <dt>Language</dt>
-                          <dd>{activeClip.page.language}</dd>
-                        </div>
-                      </dl>
-
-                      {activeClip.runtimeContext?.events.length ? (
-                        <div className="panel-disclosure-stack">
-                          <p className="panel-disclosure-label">Recent runtime events</p>
-                          <div className="runtime-event-list">
-                            {activeClip.runtimeContext.events.map((event) => (
-                              <article
-                                className={`runtime-event runtime-event-${event.level}`}
-                                key={`${event.timestamp}-${event.type}-${event.message}`}
-                              >
-                                <div className="runtime-event-head">
-                                  <span className="runtime-event-badge">{event.type.replaceAll('_', ' ')}</span>
-                                  <time>{new Date(event.timestamp).toLocaleTimeString()}</time>
-                                </div>
-                                <p>{event.message}</p>
-                                {event.source ? <code>{event.source}</code> : null}
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {activeClip.runtimeContext?.network.length ? (
-                        <div className="panel-disclosure-stack">
-                          <p className="panel-disclosure-label">Network requests</p>
-                          <div className="runtime-event-list">
-                            {activeClip.runtimeContext.network.map((request) => (
-                              <article
-                                className={`runtime-event runtime-event-${
-                                  request.classification === 'failed'
-                                    ? 'error'
-                                    : request.classification === 'slow'
-                                      ? 'warn'
-                                      : 'log'
-                                }`}
-                                key={request.id}
-                              >
-                                <div className="runtime-event-head">
-                                  <span className="runtime-event-badge">
-                                    {request.transport} {request.method}
-                                  </span>
-                                  <time>{request.durationMs}ms</time>
-                                </div>
-                                <p>{request.url}</p>
-                                <code>
-                                  status {request.status === null ? 'no-status' : request.status} · {request.classification}
-                                </code>
-                                {request.error ? <code>{request.error}</code> : null}
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {activeClip.runtimeContext?.domSummary ? (
-                        <div className="panel-disclosure-stack">
-                          <p className="panel-disclosure-label">Visible page summary</p>
-                          <div className="dom-summary-grid">
-                            <div>
-                              <dt>Path</dt>
-                              <dd>{activeClip.runtimeContext.domSummary.path}</dd>
-                            </div>
-                            <div>
-                              <dt>Headings</dt>
-                              <dd>{activeClip.runtimeContext.domSummary.headingTexts.join(', ') || 'None captured'}</dd>
-                            </div>
-                            <div>
-                              <dt>Buttons</dt>
-                              <dd>{activeClip.runtimeContext.domSummary.buttonTexts.join(', ') || 'None captured'}</dd>
-                            </div>
-                            <div>
-                              <dt>Fields</dt>
-                              <dd>{activeClip.runtimeContext.domSummary.inputLabels.join(', ') || 'None captured'}</dd>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {chromeDebugger ? (
-                        <div className="panel-disclosure-stack">
-                          <p className="panel-disclosure-label">Chrome debugger snapshot</p>
-                          <dl className="meta-grid meta-grid-compact">
-                            <div>
-                              <dt>Status</dt>
-                              <dd>{chromeDebugger.attachError || 'Captured'}</dd>
-                            </div>
-                            <div>
-                              <dt>Frames</dt>
-                              <dd>{chromeDebugger.frameCount}</dd>
-                            </div>
-                            <div>
-                              <dt>DOM nodes</dt>
-                              <dd>
-                                {typeof chromeDebugger.performance.nodes === 'number'
-                                  ? chromeDebugger.performance.nodes.toLocaleString()
-                                  : 'n/a'}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Heap used</dt>
-                              <dd>
-                                {typeof chromeDebugger.performance.jsHeapUsedSize === 'number'
-                                  ? `${Math.round(chromeDebugger.performance.jsHeapUsedSize / 1024).toLocaleString()} KB`
-                                  : 'n/a'}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Chrome logs</dt>
-                              <dd>{chromeDebugger.logs.length}</dd>
-                            </div>
-                            <div>
-                              <dt>Chrome requests</dt>
-                              <dd>{chromeDebugger.network.length}</dd>
-                            </div>
-                          </dl>
-
-                          {chromeDebugger.logs.length ? (
-                            <div className="runtime-event-list">
-                              {chromeDebugger.logs.map((entry, index) => (
-                                <article
-                                  className={`runtime-event runtime-event-${
-                                    entry.level === 'error'
-                                      ? 'error'
-                                      : entry.level === 'warning' || entry.level === 'warn'
-                                        ? 'warn'
-                                        : 'log'
-                                  }`}
-                                  key={`${entry.timestamp ?? index}-${entry.source}-${entry.text}`}
-                                >
-                                  <div className="runtime-event-head">
-                                    <span className="runtime-event-badge">
-                                      {entry.source} {entry.level}
-                                    </span>
-                                    <time>
-                                      {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : 'snapshot'}
-                                    </time>
-                                  </div>
-                                  <p>{entry.text}</p>
-                                  {entry.url ? <code>{entry.url}</code> : null}
-                                </article>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          <DebuggerNetworkInspector
-                            activeTab={activeDebuggerInspectorTab}
-                            onSelectRequest={setSelectedDebuggerRequestId}
-                            onTabChange={setActiveDebuggerInspectorTab}
-                            selectedRequestId={selectedDebuggerRequestId}
-                            snapshot={chromeDebugger}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  </details>
+                  <div
+                    aria-labelledby={`debugger-rail-tab-${activeDebuggerRailTab}`}
+                    className="debugger-rail-panel"
+                    id={debuggerRailPanelId}
+                    role="tabpanel"
+                    tabIndex={0}
+                  >
+                    {renderDebuggerRailTabContent()}
+                  </div>
                 </section>
               </section>
 

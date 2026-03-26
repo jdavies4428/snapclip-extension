@@ -1,6 +1,6 @@
-import type { ClipRecord, ClipSession, RuntimeContext } from '../types/session';
+import type { ClipSession, RuntimeContext } from '../types/session';
 import type { HandoffIntent, HandoffTarget } from '../bridge/client';
-import { redactUrlQuery, sanitizeEvidenceText, type EvidenceProfile } from '../export/evidence';
+import { buildActionTimeline, redactUrlQuery, sanitizeEvidenceText, type EvidenceProfile } from '../export/evidence';
 
 export type HandoffScope = 'active_clip' | 'session';
 
@@ -9,7 +9,14 @@ type PromptParams = {
   target: HandoffTarget;
   intent: HandoffIntent;
   evidenceProfile: EvidenceProfile;
-  activeClip: ClipRecord;
+  activeClip: {
+    title: string;
+    createdAt: string;
+    page: {
+      url: string;
+    };
+    runtimeContext: RuntimeContext | null;
+  };
   session: ClipSession;
   contextFileName?: string;
   annotationsFileName?: string;
@@ -52,6 +59,15 @@ function summarizeRuntime(runtimeContext: RuntimeContext | null): string[] {
   }
 
   return summary;
+}
+
+function summarizeActions(activeClip: PromptParams['activeClip']): string[] {
+  const timeline = buildActionTimeline(activeClip, 6);
+  if (!timeline.length) {
+    return ['- No bounded action timeline was available for this clip.'];
+  }
+
+  return timeline.map((entry) => `- [${entry.tone.toUpperCase()}] ${entry.label}: ${entry.detail}`);
 }
 
 function describeRequestedAction(intent: HandoffIntent): string {
@@ -98,6 +114,9 @@ export function createClaudePrompt(params: PromptParams): string {
     'Runtime evidence summary:',
     ...summarizeRuntime(params.activeClip.runtimeContext),
     '',
+    'Action timeline summary:',
+    ...summarizeActions(params.activeClip),
+    '',
     'Requested action:',
     describeRequestedAction(params.intent),
     '',
@@ -114,6 +133,9 @@ export function createCodexPrompt(params: PromptParams): string {
     '',
     'Runtime evidence summary:',
     ...summarizeRuntime(params.activeClip.runtimeContext),
+    '',
+    'Action timeline summary:',
+    ...summarizeActions(params.activeClip),
     '',
     'Requested action:',
     describeRequestedAction(params.intent),

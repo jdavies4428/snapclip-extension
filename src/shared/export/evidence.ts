@@ -1,6 +1,14 @@
 import type { ChromeDebuggerHeader, ClipRecord, NetworkRequest, RuntimeContext, RuntimeEvent } from '../types/session';
 
 export type EvidenceProfile = 'lean' | 'balanced' | 'full';
+export type ActionTimelineEntry = {
+  id: string;
+  kind: 'route' | 'request_failed' | 'request_slow';
+  tone: 'error' | 'warn' | 'log';
+  label: string;
+  detail: string;
+  timestamp: string;
+};
 
 type RuntimeLimits = {
   maxEvents: number;
@@ -110,6 +118,15 @@ export function redactUrlQuery(url: string): string {
   }
 }
 
+function formatActionLocation(value: string): string {
+  try {
+    const parsed = new URL(value);
+    return `${parsed.pathname || '/'}${parsed.search ? '?[redacted]' : ''}`;
+  } catch {
+    return truncate(value, 120);
+  }
+}
+
 function isSensitiveHeaderName(name: string): boolean {
   const normalized = name.trim().toLowerCase();
   return (
@@ -188,6 +205,65 @@ function dedupeNetworkRequests(requests: NetworkRequest[]): NetworkRequest[] {
   }
 
   return deduped;
+}
+
+export function buildActionTimeline(clip: Pick<ClipRecord, 'runtimeContext'>, limit = 12): ActionTimelineEntry[] {
+  if (!clip.runtimeContext) {
+    return [];
+  }
+
+  const entries: ActionTimelineEntry[] = [];
+
+  for (const event of clip.runtimeContext.events) {
+    if (event.type !== 'route_change') {
+      continue;
+    }
+
+    const routeLabel = event.url ? formatActionLocation(event.url) : truncate(event.message, 120);
+    entries.push({
+      id: `route-${event.timestamp}-${routeLabel}`,
+      kind: 'route',
+      tone: 'log',
+      label: `Navigated to ${routeLabel}`,
+      detail: event.title ? truncate(event.title, 120) : truncate(event.url || event.message, 180),
+      timestamp: event.timestamp,
+    });
+  }
+
+  for (const request of clip.runtimeContext.network) {
+    if (request.classification !== 'failed' && request.classification !== 'slow') {
+      continue;
+    }
+
+    const statusLabel = request.status === null ? 'no status' : String(request.status);
+    const detail = request.error
+      ? `${request.transport} · ${statusLabel} · ${request.durationMs}ms · ${truncate(request.error, 140)}`
+      : `${request.transport} · ${statusLabel} · ${request.durationMs}ms`;
+
+    entries.push({
+      id: `request-${request.id}`,
+      kind: request.classification === 'failed' ? 'request_failed' : 'request_slow',
+      tone: request.classification === 'failed' ? 'error' : 'warn',
+      label: `${request.classification === 'failed' ? 'Failed' : 'Slow'} ${request.method} ${formatActionLocation(
+        request.url,
+      )}`,
+      detail,
+      timestamp: request.finishedAt,
+    });
+  }
+
+  const deduped = entries.filter((entry, index, collection) => {
+    const firstIndex = collection.findIndex(
+      (candidate) =>
+        candidate.kind === entry.kind &&
+        candidate.label === entry.label &&
+        candidate.detail === entry.detail &&
+        candidate.timestamp === entry.timestamp,
+    );
+    return firstIndex === index;
+  });
+
+  return deduped.sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()).slice(-limit);
 }
 
 export function normalizeRuntimeContext(

@@ -66,7 +66,7 @@ export function createClipBundleArtifacts(params: {
       target,
       intent,
       evidenceProfile,
-      activeClip,
+      activeClip: normalizedActiveClip,
       session,
     }),
     promptCodex: createCodexPrompt({
@@ -74,7 +74,7 @@ export function createClipBundleArtifacts(params: {
       target,
       intent,
       evidenceProfile,
-      activeClip,
+      activeClip: normalizedActiveClip,
       session,
     }),
   };
