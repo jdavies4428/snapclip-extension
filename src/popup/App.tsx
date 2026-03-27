@@ -201,16 +201,6 @@ export default function App() {
               <span className="action-btn-kbd">{shortcutLabels['start-region-clip']}</span>
             </button>
           </div>
-          <div className="action-stack-full">
-            <button
-              className="action-btn action-btn-ghost"
-              disabled={isLoading}
-              onClick={() => handleStartClip('visible')}
-              type="button"
-            >
-              Full Page
-            </button>
-          </div>
         </section>
 
         <div className="section-divider" />
