@@ -434,11 +434,11 @@ function mountClipOverlay(
   hint.style.transform = 'translateX(-50%)';
   hint.style.padding = '12px 16px';
   hint.style.borderRadius = '999px';
-  hint.style.background = 'rgba(8, 15, 28, 0.96)';
-  hint.style.border = '1px solid rgba(115, 187, 255, 0.35)';
+  hint.style.background = '#111110';
+  hint.style.border = '1px solid rgba(255,255,255,0.12)';
   hint.style.boxShadow = '0 18px 50px rgba(0, 0, 0, 0.35)';
-  hint.style.color = '#e7edf7';
-  hint.style.fontFamily = '"SF Pro Display", "Segoe UI", sans-serif';
+  hint.style.color = '#FDFCFB';
+  hint.style.fontFamily = "'Geist', 'Geist Sans', system-ui, sans-serif";
   hint.style.fontSize = '14px';
   hint.style.fontWeight = '600';
   hint.style.zIndex = '2147483647';
@@ -490,10 +490,10 @@ function mountClipOverlay(
   cursorText.style.display = 'none';
   cursorText.style.padding = '6px 10px';
   cursorText.style.borderRadius = '999px';
-  cursorText.style.background = 'rgba(9, 14, 24, 0.9)';
-  cursorText.style.border = '1px solid rgba(115, 187, 255, 0.24)';
+  cursorText.style.background = '#111110';
+  cursorText.style.border = '1px solid rgba(255,255,255,0.12)';
   cursorText.style.boxShadow = '0 14px 36px rgba(0, 0, 0, 0.28)';
-  cursorText.style.color = '#eef4fb';
+  cursorText.style.color = '#FFFFFF';
 
   cursorBubble.append(cursorDot, cursorText);
   root.append(cursorBubble);
@@ -539,9 +539,9 @@ function mountClipOverlay(
       return;
     }
 
-    hint.style.background = 'rgba(8, 15, 28, 0.96)';
-    hint.style.border = '1px solid rgba(115, 187, 255, 0.35)';
-    hint.style.color = '#e7edf7';
+    hint.style.background = '#111110';
+    hint.style.border = '1px solid rgba(255,255,255,0.12)';
+    hint.style.color = '#FDFCFB';
     hint.style.boxShadow = '0 18px 50px rgba(0, 0, 0, 0.35)';
   };
 
@@ -838,12 +838,11 @@ function mountClipOverlay(
       editor.style.boxSizing = 'border-box';
       editor.style.padding = '20px';
       editor.style.borderRadius = '28px';
-      editor.style.background =
-        'radial-gradient(circle at 0% 0%, rgba(92, 165, 255, 0.14), transparent 24%), radial-gradient(circle at 100% 0%, rgba(255, 138, 91, 0.1), transparent 22%), linear-gradient(180deg, rgba(9, 14, 24, 0.985) 0%, rgba(6, 10, 18, 0.985) 100%)';
-      editor.style.border = '1px solid rgba(115, 187, 255, 0.18)';
-      editor.style.boxShadow = '0 30px 96px rgba(0, 0, 0, 0.5)';
-      editor.style.color = '#eef4fb';
-      editor.style.fontFamily = '"Avenir Next", "SF Pro Display", "Segoe UI", sans-serif';
+      editor.style.background = '#F6F4F0';
+      editor.style.border = '1px solid #D0C9C2';
+      editor.style.boxShadow = '0 30px 96px rgba(0,0,0,0.18)';
+      editor.style.color = '#111110';
+      editor.style.fontFamily = "'Geist', 'Geist Sans', system-ui, sans-serif";
       editor.style.zIndex = '2147483647';
       editor.style.display = 'grid';
       editor.style.gap = '0';
@@ -856,7 +855,7 @@ function mountClipOverlay(
       titleEyebrow.style.fontSize = '12px';
       titleEyebrow.style.fontWeight = '700';
       titleEyebrow.style.letterSpacing = '0.12em';
-      titleEyebrow.style.color = '#b9e7ff';
+      titleEyebrow.style.color = '#15783D';
 
       const titleHint = document.createElement('span');
       titleHint.textContent = 'Local only';
@@ -865,8 +864,8 @@ function mountClipOverlay(
       titleHint.style.minHeight = '28px';
       titleHint.style.padding = '0 10px';
       titleHint.style.borderRadius = '999px';
-      titleHint.style.background = 'rgba(8, 15, 28, 0.48)';
-      titleHint.style.color = '#eef7ff';
+      titleHint.style.background = 'rgba(21,120,61,0.08)';
+      titleHint.style.color = '#15783D';
       titleHint.style.fontSize = '12px';
       titleHint.style.fontWeight = '700';
       titleHint.style.letterSpacing = '0.04em';
@@ -880,8 +879,8 @@ function mountClipOverlay(
       closeButton.style.height = '42px';
       closeButton.style.borderRadius = '999px';
       closeButton.style.border = '0';
-      closeButton.style.background = 'rgba(255,255,255,0.08)';
-      closeButton.style.color = '#edf3fb';
+      closeButton.style.background = 'rgba(0,0,0,0.06)';
+      closeButton.style.color = '#111110';
       closeButton.style.font = 'inherit';
       closeButton.style.fontWeight = '800';
       closeButton.style.cursor = 'pointer';
@@ -895,10 +894,9 @@ function mountClipOverlay(
       railHeader.style.gap = '12px';
       railHeader.style.padding = '16px';
       railHeader.style.borderRadius = '22px';
-      railHeader.style.background =
-        'linear-gradient(135deg, rgba(83, 197, 255, 0.18) 0%, rgba(59, 130, 255, 0.12) 100%)';
-      railHeader.style.border = '1px solid rgba(117, 204, 255, 0.22)';
-      railHeader.style.boxShadow = '0 14px 40px rgba(35, 116, 255, 0.14)';
+      railHeader.style.background = '#FFFFFF';
+      railHeader.style.border = '1px solid rgba(0,0,0,0.10)';
+      railHeader.style.boxShadow = 'none';
 
       const titleTopRow = document.createElement('div');
       titleTopRow.style.display = 'flex';
@@ -924,7 +922,7 @@ function mountClipOverlay(
       titleSub.style.margin = '0';
       titleSub.style.fontSize = '13px';
       titleSub.style.lineHeight = '1.5';
-      titleSub.style.color = '#b7c4da';
+      titleSub.style.color = '#6B7280';
 
       titleControls.append(titleHint, closeButton);
       titleTopRow.append(titleEyebrow, titleControls);
@@ -937,7 +935,7 @@ function mountClipOverlay(
 
       const noteLabel = document.createElement('div');
       noteLabel.textContent = 'Agent prompt';
-      noteLabel.style.color = '#88d5ff';
+      noteLabel.style.color = '#15783D';
       noteLabel.style.fontSize = '12px';
       noteLabel.style.fontWeight = '700';
       noteLabel.style.letterSpacing = '0.08em';
@@ -946,7 +944,7 @@ function mountClipOverlay(
       const noteHelp = document.createElement('p');
       noteHelp.textContent = 'Say what looks wrong and what you want the model to do next.';
       noteHelp.style.margin = '0';
-      noteHelp.style.color = '#b7c4da';
+      noteHelp.style.color = '#6B7280';
       noteHelp.style.fontSize = '13px';
       noteHelp.style.lineHeight = '1.45';
 
@@ -958,10 +956,10 @@ function mountClipOverlay(
       noteField.style.boxSizing = 'border-box';
       noteField.style.resize = 'none';
       noteField.style.borderRadius = '16px';
-      noteField.style.border = '1px solid rgba(103, 209, 255, 0.18)';
+      noteField.style.border = '1px solid rgba(0,0,0,0.15)';
       noteField.style.padding = '14px 16px';
-      noteField.style.background = 'rgba(255,255,255,0.05)';
-      noteField.style.color = '#eef4fb';
+      noteField.style.background = '#FFFFFF';
+      noteField.style.color = '#1A1A1A';
       noteField.style.font = 'inherit';
       noteField.style.fontSize = '14px';
       noteField.style.lineHeight = '1.5';
@@ -974,8 +972,8 @@ function mountClipOverlay(
       claudeRailStrip.style.gap = '10px';
       claudeRailStrip.style.padding = '12px';
       claudeRailStrip.style.borderRadius = '18px';
-      claudeRailStrip.style.background = 'rgba(6, 12, 22, 0.76)';
-      claudeRailStrip.style.border = '1px solid rgba(103, 209, 255, 0.18)';
+      claudeRailStrip.style.background = '#FFFFFF';
+      claudeRailStrip.style.border = '1px solid rgba(0,0,0,0.10)';
 
       noteCard.append(noteLabel, noteHelp, noteField, claudeRailStrip);
 
@@ -990,8 +988,8 @@ function mountClipOverlay(
       actionStatus.style.minHeight = '36px';
       actionStatus.style.padding = '0 12px';
       actionStatus.style.borderRadius = '12px';
-      actionStatus.style.background = 'rgba(255,255,255,0.06)';
-      actionStatus.style.color = '#dbe8f8';
+      actionStatus.style.background = 'rgba(0,0,0,0.05)';
+      actionStatus.style.color = '#1A1A1A';
       actionStatus.style.fontSize = '13px';
       actionStatus.style.fontWeight = '700';
       actionStatus.style.lineHeight = '1.35';
@@ -1031,10 +1029,10 @@ function mountClipOverlay(
       hoverCard.style.maxWidth = '220px';
       hoverCard.style.padding = '10px 12px';
       hoverCard.style.borderRadius = '12px';
-      hoverCard.style.background = 'rgba(8, 15, 28, 0.96)';
-      hoverCard.style.border = '1px solid rgba(115, 187, 255, 0.28)';
+      hoverCard.style.background = '#1A1A1A';
+      hoverCard.style.border = '1px solid rgba(0,0,0,0.15)';
       hoverCard.style.boxShadow = '0 14px 40px rgba(0, 0, 0, 0.35)';
-      hoverCard.style.color = '#edf3fb';
+      hoverCard.style.color = '#FFFFFF';
       hoverCard.style.fontSize = '12px';
       hoverCard.style.fontWeight = '600';
       hoverCard.style.lineHeight = '1.45';
@@ -1086,7 +1084,7 @@ function mountClipOverlay(
 
       [toolBoxButton, toolTextButton, toolArrowButton, toolUndoButton, copyButton, copyInstructionsButton, copySummaryButton, saveButton, cancelButton, detailsButton].forEach((button) => {
         button.style.border = '0';
-        button.style.borderRadius = '14px';
+        button.style.borderRadius = '6px';
         button.style.padding = '11px 14px';
         button.style.font = 'inherit';
         button.style.fontSize = '13px';
@@ -1095,11 +1093,11 @@ function mountClipOverlay(
         button.style.cursor = 'pointer';
         button.style.background =
           button === saveButton
-            ? 'linear-gradient(135deg, #6acfff 0%, #3b82ff 100%)'
-            : 'rgba(255,255,255,0.08)';
-        button.style.color = button === saveButton ? '#041220' : '#edf3fb';
+            ? '#15783D'
+            : 'rgba(0,0,0,0.06)';
+        button.style.color = button === saveButton ? '#FFFFFF' : '#1A1A1A';
         button.style.width = '100%';
-        button.style.minHeight = '48px';
+        button.style.minHeight = '44px';
         button.style.textWrap = 'balance';
       });
 
@@ -1146,7 +1144,7 @@ function mountClipOverlay(
       selectionHint.style.display = 'block';
       selectionHint.style.minHeight = '34px';
       selectionHint.style.padding = '6px 2px 0';
-      selectionHint.style.color = '#9db2cf';
+      selectionHint.style.color = '#867E78';
       selectionHint.style.fontSize = '12px';
       selectionHint.style.fontWeight = '600';
       selectionHint.style.lineHeight = '1.45';
@@ -1165,8 +1163,9 @@ function mountClipOverlay(
       clipModeBadge.textContent = clipMode === 'visible' ? 'Visible tab clip' : 'Area clip';
       clipModeBadge.style.padding = '8px 10px';
       clipModeBadge.style.borderRadius = '999px';
-      clipModeBadge.style.background = 'rgba(103, 196, 255, 0.14)';
-      clipModeBadge.style.color = '#88d5ff';
+      clipModeBadge.style.background = '#EBF5EF';
+      clipModeBadge.style.color = '#15783D';
+      clipModeBadge.style.border = '1px solid #D0C9C2';
       clipModeBadge.style.fontSize = '12px';
       clipModeBadge.style.fontWeight = '700';
       clipModeBadge.style.letterSpacing = '0.08em';
@@ -1176,8 +1175,9 @@ function mountClipOverlay(
       sizeBadge.textContent = `${Math.round(image.naturalWidth)} x ${Math.round(image.naturalHeight)}`;
       sizeBadge.style.padding = '8px 10px';
       sizeBadge.style.borderRadius = '999px';
-      sizeBadge.style.background = 'rgba(255,255,255,0.08)';
-      sizeBadge.style.color = '#d5e2f4';
+      sizeBadge.style.background = 'rgba(0,0,0,0.05)';
+      sizeBadge.style.color = '#111110';
+      sizeBadge.style.border = '1px solid #E4DED8';
       sizeBadge.style.fontSize = '12px';
       sizeBadge.style.fontWeight = '600';
 
@@ -1185,8 +1185,9 @@ function mountClipOverlay(
       savedClipsBadge.textContent = 'Checking saved clips...';
       savedClipsBadge.style.padding = '8px 10px';
       savedClipsBadge.style.borderRadius = '999px';
-      savedClipsBadge.style.background = 'rgba(255,255,255,0.08)';
-      savedClipsBadge.style.color = '#d5e2f4';
+      savedClipsBadge.style.background = 'rgba(0,0,0,0.05)';
+      savedClipsBadge.style.color = '#111110';
+      savedClipsBadge.style.border = '1px solid #E4DED8';
       savedClipsBadge.style.fontSize = '12px';
       savedClipsBadge.style.fontWeight = '600';
 
@@ -1263,7 +1264,7 @@ function mountClipOverlay(
 
       const detailsEyebrow = document.createElement('div');
       detailsEyebrow.textContent = 'DEBUG INFO';
-      detailsEyebrow.style.color = '#88d5ff';
+      detailsEyebrow.style.color = '#15783D';
       detailsEyebrow.style.fontSize = '11px';
       detailsEyebrow.style.fontWeight = '700';
       detailsEyebrow.style.letterSpacing = '0.08em';
@@ -1273,13 +1274,13 @@ function mountClipOverlay(
       detailsTitle.textContent = 'Debug inspector';
       detailsTitle.style.margin = '0';
       detailsTitle.style.fontSize = '22px';
-      detailsTitle.style.color = '#eef4fb';
+      detailsTitle.style.color = '#111110';
 
       const detailsLead = document.createElement('p');
       detailsLead.textContent =
         'What happened left. Why it failed right. Counts reflect events captured for this clip after the runtime monitor attached.';
       detailsLead.style.margin = '0';
-      detailsLead.style.color = '#b7c4da';
+      detailsLead.style.color = '#867E78';
       detailsLead.style.fontSize = '12px';
       detailsLead.style.lineHeight = '1.5';
 
@@ -1293,33 +1294,33 @@ function mountClipOverlay(
 
       const copyDebugButton = document.createElement('button');
       copyDebugButton.textContent = 'Copy report';
-      copyDebugButton.style.border = '0';
-      copyDebugButton.style.borderRadius = '12px';
+      copyDebugButton.style.background = 'rgba(0,0,0,0.06)';
+      copyDebugButton.style.color = '#111110';
+      copyDebugButton.style.border = '1px solid #E4DED8';
+      copyDebugButton.style.borderRadius = '6px';
       copyDebugButton.style.padding = '10px 14px';
       copyDebugButton.style.font = 'inherit';
       copyDebugButton.style.fontWeight = '700';
       copyDebugButton.style.cursor = 'pointer';
-      copyDebugButton.style.background = 'rgba(255,255,255,0.08)';
-      copyDebugButton.style.color = '#edf3fb';
 
       const detailsBackButton = document.createElement('button');
       detailsBackButton.textContent = 'Back';
-      detailsBackButton.style.border = '0';
-      detailsBackButton.style.borderRadius = '12px';
+      detailsBackButton.style.background = 'rgba(0,0,0,0.06)';
+      detailsBackButton.style.color = '#111110';
+      detailsBackButton.style.border = '1px solid #E4DED8';
+      detailsBackButton.style.borderRadius = '6px';
       detailsBackButton.style.padding = '10px 14px';
       detailsBackButton.style.font = 'inherit';
       detailsBackButton.style.fontWeight = '700';
       detailsBackButton.style.cursor = 'pointer';
-      detailsBackButton.style.background = 'rgba(255,255,255,0.08)';
-      detailsBackButton.style.color = '#edf3fb';
 
       const claudeDebugStrip = document.createElement('div');
       claudeDebugStrip.style.display = 'grid';
       claudeDebugStrip.style.gap = '10px';
       claudeDebugStrip.style.padding = '12px 14px';
       claudeDebugStrip.style.borderRadius = '16px';
-      claudeDebugStrip.style.background = 'rgba(255, 255, 255, 0.04)';
-      claudeDebugStrip.style.border = '1px solid rgba(103, 209, 255, 0.16)';
+      claudeDebugStrip.style.background = '#FDFCFB';
+      claudeDebugStrip.style.border = '1px solid #E4DED8';
 
       detailsTitleBlock.append(detailsEyebrow, detailsTitle, detailsLead);
       detailsHeaderStack.append(detailsTitleBlock);
@@ -1330,7 +1331,7 @@ function mountClipOverlay(
       stage.style.position = 'relative';
       stage.style.borderRadius = '18px';
       stage.style.overflow = 'hidden';
-      stage.style.border = '1px solid rgba(157, 177, 207, 0.16)';
+      stage.style.border = '1px solid #E4DED8';
       stage.style.background = '#050811';
       stage.style.cursor = 'none';
       stage.style.minHeight = '0';
@@ -1510,8 +1511,8 @@ function mountClipOverlay(
         card.style.gap = '8px';
         card.style.padding = '12px';
         card.style.borderRadius = '14px';
-        card.style.border = '1px solid rgba(157, 177, 207, 0.12)';
-        card.style.background = 'rgba(255, 255, 255, 0.028)';
+        card.style.border = '1px solid #E4DED8';
+        card.style.background = '#FDFCFB';
 
         const head = document.createElement('div');
         head.style.display = 'grid';
@@ -1521,7 +1522,7 @@ function mountClipOverlay(
         heading.textContent = title;
         heading.style.margin = '0';
         heading.style.fontSize = '14px';
-        heading.style.color = '#eef4fb';
+        heading.style.color = '#111110';
 
         head.append(heading);
 
@@ -1529,7 +1530,7 @@ function mountClipOverlay(
           const sub = document.createElement('p');
           sub.textContent = subtitle;
           sub.style.margin = '0';
-          sub.style.color = '#9db2cf';
+          sub.style.color = '#867E78';
           sub.style.fontSize = '11px';
           sub.style.lineHeight = '1.45';
           head.append(sub);
@@ -1547,25 +1548,25 @@ function mountClipOverlay(
         pill.style.borderRadius = '12px';
         pill.style.border =
           tone === 'error'
-            ? '1px solid rgba(255, 132, 95, 0.2)'
+            ? '1px solid rgba(204, 43, 43, 0.24)'
             : tone === 'warn'
-              ? '1px solid rgba(255, 196, 94, 0.22)'
-              : '1px solid rgba(157, 177, 207, 0.14)';
+              ? '1px solid rgba(232, 150, 10, 0.24)'
+              : '1px solid #E4DED8';
         pill.style.background =
           tone === 'error'
-            ? 'rgba(105, 31, 40, 0.2)'
+            ? '#FDEAEA'
             : tone === 'warn'
-              ? 'rgba(82, 61, 17, 0.2)'
-              : 'rgba(255, 255, 255, 0.035)';
+              ? '#FEF3DC'
+              : '#FDFCFB';
 
         const metricValue = document.createElement('strong');
         metricValue.textContent = value;
-        metricValue.style.color = '#eef4fb';
+        metricValue.style.color = '#111110';
         metricValue.style.fontSize = '15px';
 
         const metricLabel = document.createElement('span');
         metricLabel.textContent = label;
-        metricLabel.style.color = '#9db2cf';
+        metricLabel.style.color = '#867E78';
         metricLabel.style.fontSize = '11px';
         metricLabel.style.fontWeight = '700';
         metricLabel.style.letterSpacing = '0.08em';
@@ -1582,7 +1583,7 @@ function mountClipOverlay(
 
         const dt = document.createElement('div');
         dt.textContent = label;
-        dt.style.color = '#88a2c6';
+        dt.style.color = '#867E78';
         dt.style.fontSize = '11px';
         dt.style.fontWeight = '700';
         dt.style.letterSpacing = '0.08em';
@@ -1590,7 +1591,7 @@ function mountClipOverlay(
 
         const dd = document.createElement('div');
         dd.textContent = value;
-        dd.style.color = '#d8e3f2';
+        dd.style.color = '#111110';
         dd.style.fontSize = '13px';
         dd.style.lineHeight = '1.45';
         dd.style.wordBreak = 'break-word';
@@ -1604,9 +1605,9 @@ function mountClipOverlay(
         empty.textContent = message;
         empty.style.padding = '14px';
         empty.style.borderRadius = '16px';
-        empty.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-        empty.style.background = 'rgba(255, 255, 255, 0.03)';
-        empty.style.color = '#9db2cf';
+        empty.style.border = '1px solid #E4DED8';
+        empty.style.background = '#FDFCFB';
+        empty.style.color = '#867E78';
         empty.style.fontSize = '13px';
         empty.style.lineHeight = '1.5';
         return empty;
@@ -1647,20 +1648,20 @@ function mountClipOverlay(
           item.style.borderRadius = '12px';
           item.style.border =
             entry.tone === 'error'
-              ? '1px solid rgba(255, 132, 95, 0.24)'
+              ? '1px solid rgba(204, 43, 43, 0.24)'
               : entry.tone === 'warn'
-                ? '1px solid rgba(255, 196, 94, 0.24)'
-                : '1px solid rgba(157, 177, 207, 0.14)';
+                ? '1px solid rgba(232, 150, 10, 0.24)'
+                : '1px solid #E4DED8';
           item.style.background =
             entry.tone === 'error'
-              ? 'rgba(105, 31, 40, 0.18)'
+              ? '#FDEAEA'
               : entry.tone === 'warn'
-                ? 'rgba(82, 61, 17, 0.18)'
-                : 'rgba(255, 255, 255, 0.035)';
+                ? '#FEF3DC'
+                : '#FDFCFB';
 
           const label = document.createElement('div');
           label.textContent = entry.label;
-          label.style.color = '#9db2cf';
+          label.style.color = '#867E78';
           label.style.fontSize = '11px';
           label.style.fontWeight = '700';
           label.style.letterSpacing = '0.08em';
@@ -1668,7 +1669,7 @@ function mountClipOverlay(
 
           const value = document.createElement('div');
           value.textContent = entry.value;
-          value.style.color = '#eef4fb';
+          value.style.color = '#111110';
           value.style.fontSize = '12px';
           value.style.lineHeight = '1.5';
           value.style.wordBreak = 'break-word';
@@ -1717,8 +1718,8 @@ function mountClipOverlay(
       previewBrowserFrame.style.gap = '0';
       previewBrowserFrame.style.borderRadius = '20px';
       previewBrowserFrame.style.overflow = 'hidden';
-      previewBrowserFrame.style.border = '1px solid rgba(157, 177, 207, 0.14)';
-      previewBrowserFrame.style.background = 'rgba(8, 12, 22, 0.96)';
+      previewBrowserFrame.style.border = '1px solid #D0C9C2';
+      previewBrowserFrame.style.background = '#EEE9E3';
 
       const previewBrowserChrome = document.createElement('div');
       previewBrowserChrome.style.display = 'grid';
@@ -1726,9 +1727,8 @@ function mountClipOverlay(
       previewBrowserChrome.style.alignItems = 'center';
       previewBrowserChrome.style.gap = '12px';
       previewBrowserChrome.style.padding = '12px 14px';
-      previewBrowserChrome.style.background =
-        'linear-gradient(180deg, rgba(74, 52, 98, 0.94) 0%, rgba(54, 38, 74, 0.96) 100%)';
-      previewBrowserChrome.style.borderBottom = '1px solid rgba(154, 177, 205, 0.12)';
+      previewBrowserChrome.style.background = '#EEE9E3';
+      previewBrowserChrome.style.borderBottom = '1px solid #D0C9C2';
 
       const previewBrowserDots = document.createElement('div');
       previewBrowserDots.style.display = 'flex';
@@ -1750,8 +1750,8 @@ function mountClipOverlay(
       previewUrlBar.style.minWidth = '0';
       previewUrlBar.style.padding = '11px 16px';
       previewUrlBar.style.borderRadius = '999px';
-      previewUrlBar.style.background = 'rgba(255,255,255,0.08)';
-      previewUrlBar.style.color = '#efe8ff';
+      previewUrlBar.style.background = '#EEE9E3';
+      previewUrlBar.style.color = '#111110';
       previewUrlBar.style.fontSize = '13px';
       previewUrlBar.style.lineHeight = '1.35';
       previewUrlBar.style.whiteSpace = 'nowrap';
@@ -1765,8 +1765,8 @@ function mountClipOverlay(
       previewBrowserTag.style.padding = '0 10px';
       previewBrowserTag.style.minHeight = '30px';
       previewBrowserTag.style.borderRadius = '999px';
-      previewBrowserTag.style.background = 'rgba(255,255,255,0.08)';
-      previewBrowserTag.style.color = '#d7def0';
+      previewBrowserTag.style.background = '#EEE9E3';
+      previewBrowserTag.style.color = '#867E78';
       previewBrowserTag.style.fontSize = '11px';
       previewBrowserTag.style.fontWeight = '700';
       previewBrowserTag.style.letterSpacing = '0.08em';
@@ -1848,20 +1848,20 @@ function mountClipOverlay(
           row.style.borderRadius = '12px';
           row.style.border =
             entry.tone === 'error'
-              ? '1px solid rgba(255, 132, 95, 0.24)'
+              ? '1px solid rgba(204, 43, 43, 0.24)'
               : entry.tone === 'warn'
-                ? '1px solid rgba(255, 196, 94, 0.22)'
-                : '1px solid rgba(157, 177, 207, 0.14)';
+                ? '1px solid rgba(232, 150, 10, 0.24)'
+                : '1px solid #E4DED8';
           row.style.background =
             entry.tone === 'error'
-              ? 'rgba(105, 31, 40, 0.2)'
+              ? '#FDEAEA'
               : entry.tone === 'warn'
-                ? 'rgba(82, 61, 17, 0.2)'
-                : 'rgba(255, 255, 255, 0.035)';
+                ? '#FEF3DC'
+                : '#FDFCFB';
 
           const eyebrow = document.createElement('div');
           eyebrow.textContent = entry.eyebrow;
-          eyebrow.style.color = '#88a2c6';
+          eyebrow.style.color = '#867E78';
           eyebrow.style.fontSize = '11px';
           eyebrow.style.fontWeight = '700';
           eyebrow.style.letterSpacing = '0.08em';
@@ -1869,7 +1869,7 @@ function mountClipOverlay(
 
           const title = document.createElement('div');
           title.textContent = entry.title;
-          title.style.color = '#eef4fb';
+          title.style.color = '#111110';
           title.style.fontSize = '12px';
           title.style.lineHeight = '1.5';
           title.style.wordBreak = 'break-word';
@@ -1879,7 +1879,7 @@ function mountClipOverlay(
           if (entry.detail) {
             const detail = document.createElement('div');
             detail.textContent = entry.detail;
-            detail.style.color = '#9db2cf';
+            detail.style.color = '#867E78';
             detail.style.fontSize = '11px';
             detail.style.lineHeight = '1.5';
             detail.style.wordBreak = 'break-word';
@@ -2040,7 +2040,7 @@ function mountClipOverlay(
       debugTabs.style.flexWrap = 'nowrap';
       debugTabs.style.overflowX = 'auto';
       debugTabs.style.paddingBottom = '6px';
-      debugTabs.style.borderBottom = '1px solid rgba(157, 177, 207, 0.12)';
+      debugTabs.style.borderBottom = '1px solid #E4DED8';
       debugTabs.setAttribute('role', 'tablist');
       debugTabs.setAttribute('aria-label', 'Debug inspector tabs');
 
@@ -2093,8 +2093,8 @@ function mountClipOverlay(
           button.tabIndex = active ? 0 : -1;
           button.style.background = 'transparent';
           button.style.borderColor = 'transparent';
-          button.style.color = active ? '#eef7ff' : '#8ea6c5';
-          button.style.boxShadow = active ? 'inset 0 -2px 0 rgba(103, 209, 255, 0.72)' : 'none';
+          button.style.color = active ? '#111110' : '#867E78';
+          button.style.boxShadow = active ? 'inset 0 -2px 0 #15783D' : 'none';
           button.style.opacity = active ? '1' : '0.88';
         });
 
@@ -2117,7 +2117,7 @@ function mountClipOverlay(
         button.style.padding = '12px 16px 10px';
         button.style.minHeight = '40px';
         button.style.background = 'transparent';
-        button.style.color = '#8ea6c5';
+        button.style.color = '#867E78';
         button.style.font = 'inherit';
         button.style.fontSize = '14px';
         button.style.fontWeight = '700';
@@ -2180,7 +2180,8 @@ function mountClipOverlay(
       let annotations: ClipAnnotation[] = (initialClip?.annotations ?? []).map((annotation) => ({ ...annotation }));
       let selectedAnnotationId: string | null = null;
 
-      const annotationColor = '#ff8a5b';
+      const boxAnnotationColor = '#E8960A';
+      const arrowAnnotationColor = '#CC2B2B';
       let pendingTextPoint: { x: number; y: number } | null = null;
       let editingTextAnnotationId: string | null = null;
       const textBounds = new Map<string, { left: number; right: number; top: number; bottom: number }>();
@@ -2249,8 +2250,8 @@ function mountClipOverlay(
       textComposer.style.width = 'min(280px, calc(100% - 24px))';
       textComposer.style.padding = '12px';
       textComposer.style.borderRadius = '14px';
-      textComposer.style.background = 'rgba(8, 15, 28, 0.96)';
-      textComposer.style.border = `1px solid ${annotationColor}`;
+      textComposer.style.background = '#FDFCFB';
+      textComposer.style.border = '1px solid #D0C9C2';
       textComposer.style.boxShadow = '0 18px 48px rgba(0, 0, 0, 0.35)';
       textComposer.style.display = 'none';
       textComposer.style.gap = '10px';
@@ -2269,7 +2270,7 @@ function mountClipOverlay(
       textComposerLabel.style.fontWeight = '700';
       textComposerLabel.style.letterSpacing = '0.08em';
       textComposerLabel.style.textTransform = 'uppercase';
-      textComposerLabel.style.color = '#88d5ff';
+      textComposerLabel.style.color = '#15783D';
 
       const textComposerClose = document.createElement('button');
       textComposerClose.textContent = 'X';
@@ -2279,8 +2280,8 @@ function mountClipOverlay(
       textComposerClose.style.height = '28px';
       textComposerClose.style.borderRadius = '999px';
       textComposerClose.style.border = '0';
-      textComposerClose.style.background = 'rgba(255,255,255,0.08)';
-      textComposerClose.style.color = '#edf3fb';
+      textComposerClose.style.background = 'rgba(0,0,0,0.06)';
+      textComposerClose.style.color = '#111110';
       textComposerClose.style.font = 'inherit';
       textComposerClose.style.fontWeight = '700';
       textComposerClose.style.cursor = 'pointer';
@@ -2293,10 +2294,10 @@ function mountClipOverlay(
       textComposerInput.style.boxSizing = 'border-box';
       textComposerInput.style.resize = 'none';
       textComposerInput.style.borderRadius = '12px';
-      textComposerInput.style.border = '1px solid rgba(103, 209, 255, 0.24)';
+      textComposerInput.style.border = '1px solid #D0C9C2';
       textComposerInput.style.padding = '10px 12px';
-      textComposerInput.style.background = 'rgba(255,255,255,0.06)';
-      textComposerInput.style.color = '#eef4fb';
+      textComposerInput.style.background = '#FDFCFB';
+      textComposerInput.style.color = '#111110';
       textComposerInput.style.font = 'inherit';
 
       const textComposerActions = document.createElement('div');
@@ -2317,10 +2318,10 @@ function mountClipOverlay(
         button.style.fontWeight = '700';
         button.style.cursor = 'pointer';
       });
-      textComposerSave.style.background = 'linear-gradient(135deg, #6acfff 0%, #3b82ff 100%)';
-      textComposerSave.style.color = '#041220';
-      textComposerCancel.style.background = 'rgba(255,255,255,0.08)';
-      textComposerCancel.style.color = '#edf3fb';
+      textComposerSave.style.background = '#15783D';
+      textComposerSave.style.color = '#FFFFFF';
+      textComposerCancel.style.background = 'rgba(0,0,0,0.06)';
+      textComposerCancel.style.color = '#111110';
 
       textComposerActions.append(textComposerSave, textComposerCancel);
       textComposerHeader.append(textComposerLabel, textComposerClose);
@@ -2343,10 +2344,10 @@ function mountClipOverlay(
           node.style.top = `${annotation.y}%`;
           node.style.width = `${annotation.width}%`;
           node.style.height = `${annotation.height}%`;
-          node.style.border = `3px ${draft ? 'dashed' : 'solid'} ${annotationColor}`;
+          node.style.border = `3px ${draft ? 'dashed' : 'solid'} ${boxAnnotationColor}`;
           node.style.borderRadius = '12px';
-          node.style.background = isSelected ? 'rgba(255, 138, 91, 0.1)' : 'rgba(255, 138, 91, 0.06)';
-          node.style.boxShadow = isSelected ? '0 0 0 2px rgba(255, 214, 196, 0.4)' : 'none';
+          node.style.background = isSelected ? 'rgba(232, 150, 10, 0.1)' : 'rgba(232, 150, 10, 0.06)';
+          node.style.boxShadow = isSelected ? '0 0 0 2px rgba(232, 150, 10, 0.3)' : 'none';
           node.style.pointerEvents = 'none';
           stage.append(node);
 
@@ -2359,8 +2360,8 @@ function mountClipOverlay(
             handle.style.width = '14px';
             handle.style.height = '14px';
             handle.style.borderRadius = '999px';
-            handle.style.background = '#fff4ee';
-            handle.style.border = `3px solid ${annotationColor}`;
+            handle.style.background = '#FEF3DC';
+            handle.style.border = `3px solid ${boxAnnotationColor}`;
             handle.style.boxSizing = 'border-box';
             handle.style.pointerEvents = 'none';
             handle.style.boxShadow = '0 10px 20px rgba(0, 0, 0, 0.24)';
@@ -2394,7 +2395,7 @@ function mountClipOverlay(
           marker.setAttribute('orient', 'auto');
           const markerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           markerPath.setAttribute('d', 'M0,0 L6,3 L0,6 z');
-          markerPath.setAttribute('fill', annotationColor);
+          markerPath.setAttribute('fill', arrowAnnotationColor);
           marker.append(markerPath);
           defs.append(marker);
 
@@ -2403,7 +2404,7 @@ function mountClipOverlay(
           line.setAttribute('y1', String(annotation.startY));
           line.setAttribute('x2', String(annotation.endX));
           line.setAttribute('y2', String(annotation.endY));
-          line.setAttribute('stroke', annotationColor);
+          line.setAttribute('stroke', arrowAnnotationColor);
           line.setAttribute('stroke-width', isSelected ? '0.95' : '0.7');
           line.setAttribute('stroke-linecap', 'round');
           if (draft) {
@@ -2429,8 +2430,8 @@ function mountClipOverlay(
               handle.style.width = '12px';
               handle.style.height = '12px';
               handle.style.borderRadius = '999px';
-              handle.style.background = '#fff4ee';
-              handle.style.border = `3px solid ${annotationColor}`;
+              handle.style.background = '#FDEAEA';
+              handle.style.border = `3px solid ${arrowAnnotationColor}`;
               handle.style.boxSizing = 'border-box';
               handle.style.pointerEvents = 'none';
               handle.style.boxShadow = '0 8px 18px rgba(0, 0, 0, 0.24)';
@@ -2450,16 +2451,16 @@ function mountClipOverlay(
           node.style.transform = 'translateY(-100%)';
           node.style.padding = '6px 10px';
           node.style.borderRadius = '10px';
-          node.style.background = isSelected ? 'rgba(8, 15, 28, 0.96)' : 'rgba(8, 15, 28, 0.88)';
-          node.style.border = `2px solid ${annotationColor}`;
-          node.style.color = '#eef4fb';
+          node.style.background = '#1A1A1A';
+          node.style.border = isSelected ? '2px solid rgba(255,255,255,0.3)' : '2px solid transparent';
+          node.style.color = '#FFFFFF';
           node.style.fontSize = '14px';
           node.style.fontWeight = '700';
           node.style.lineHeight = '1.35';
           node.style.pointerEvents = 'none';
           node.style.maxWidth = '58%';
           node.style.wordBreak = 'break-word';
-          node.style.boxShadow = isSelected ? '0 0 0 2px rgba(255, 214, 196, 0.35)' : 'none';
+          node.style.boxShadow = isSelected ? '0 0 0 2px rgba(255,255,255,0.15)' : 'none';
           stage.append(node);
 
           if (annotation.id) {
@@ -2546,7 +2547,7 @@ function mountClipOverlay(
             {
               id: annotationId,
               kind: 'text',
-              color: annotationColor,
+              color: '#1A1A1A',
               text,
               x: textPoint.x,
               y: textPoint.y,
@@ -2978,11 +2979,9 @@ function mountClipOverlay(
 
       const syncActiveTool = () => {
         const setToolState = (button: HTMLButtonElement, isActive: boolean) => {
-          button.style.background = isActive
-            ? 'linear-gradient(135deg, rgba(106, 207, 255, 0.24) 0%, rgba(59, 130, 255, 0.2) 100%)'
-            : 'rgba(255,255,255,0.08)';
-          button.style.color = isActive ? '#f3fbff' : '#d7e4f5';
-          button.style.boxShadow = isActive ? '0 0 0 1px rgba(103, 209, 255, 0.42) inset' : 'none';
+          button.style.background = isActive ? '#15783D' : 'rgba(0,0,0,0.06)';
+          button.style.color = isActive ? '#FFFFFF' : '#1A1A1A';
+          button.style.boxShadow = 'none';
         };
 
         setToolState(toolTextButton, activeTool === 'text');
@@ -3012,8 +3011,8 @@ function mountClipOverlay(
           return;
         }
 
-        actionStatus.style.background = 'rgba(255,255,255,0.06)';
-        actionStatus.style.color = '#dbe8f8';
+        actionStatus.style.background = 'rgba(0,0,0,0.05)';
+        actionStatus.style.color = '#1A1A1A';
       };
 
       type OverlayBridgeWorkspace = {
@@ -3060,22 +3059,22 @@ function mountClipOverlay(
         tone: 'default' | 'success' | 'error',
       ) => {
         if (tone === 'success') {
-          node.style.background = 'rgba(20, 96, 62, 0.22)';
-          node.style.color = '#dffbed';
-          node.style.border = '1px solid rgba(83, 211, 149, 0.24)';
+          node.style.background = '#EBF5EF';
+          node.style.color = '#15783D';
+          node.style.border = '1px solid rgba(21, 120, 61, 0.24)';
           return;
         }
 
         if (tone === 'error') {
-          node.style.background = 'rgba(105, 31, 40, 0.24)';
-          node.style.color = '#ffe4ea';
-          node.style.border = '1px solid rgba(255, 119, 143, 0.24)';
+          node.style.background = '#FDEAEA';
+          node.style.color = '#CC2B2B';
+          node.style.border = '1px solid rgba(204, 43, 43, 0.24)';
           return;
         }
 
-        node.style.background = 'rgba(255,255,255,0.04)';
-        node.style.color = '#b7c4da';
-        node.style.border = '1px solid rgba(255,255,255,0.08)';
+        node.style.background = 'rgba(0,0,0,0.04)';
+        node.style.color = '#867E78';
+        node.style.border = '1px solid #E4DED8';
       };
 
       const syncSaveButtonLabel = () => {
@@ -3175,7 +3174,7 @@ function mountClipOverlay(
 
           const eyebrow = document.createElement('div');
           eyebrow.textContent = 'SEND TO AGENT';
-          eyebrow.style.color = '#88d5ff';
+          eyebrow.style.color = '#15783D';
           eyebrow.style.fontSize = mode === 'rail' ? '11px' : '10px';
           eyebrow.style.fontWeight = '700';
           eyebrow.style.letterSpacing = '0.08em';
@@ -3186,7 +3185,7 @@ function mountClipOverlay(
             mode === 'rail'
               ? 'Send this clip one-way into a live Claude or Codex session when the local companion is ready.'
               : 'Send this clip one-way from the debug report.';
-          copy.style.color = '#b7c4da';
+          copy.style.color = '#6B7280';
           copy.style.fontSize = mode === 'rail' ? '12px' : '11px';
           copy.style.lineHeight = '1.45';
 
@@ -3203,9 +3202,9 @@ function mountClipOverlay(
             workspaceSelect.value = selectedWorkspaceId;
             workspaceSelect.disabled = isBridgeLoading || isBridgeSending;
             workspaceSelect.style.borderRadius = '10px';
-            workspaceSelect.style.border = '1px solid rgba(117, 204, 255, 0.2)';
-            workspaceSelect.style.background = 'rgba(6, 12, 22, 0.92)';
-            workspaceSelect.style.color = '#edf3fb';
+            workspaceSelect.style.border = '1px solid #D0C9C2';
+            workspaceSelect.style.background = '#FDFCFB';
+            workspaceSelect.style.color = '#111110';
             workspaceSelect.style.font = 'inherit';
             workspaceSelect.style.fontSize = '12px';
             workspaceSelect.style.padding = '8px 10px';
@@ -3226,8 +3225,9 @@ function mountClipOverlay(
             workspacePill.textContent = bridgeWorkspaces[0]!.name;
             workspacePill.style.padding = '8px 10px';
             workspacePill.style.borderRadius = '999px';
-            workspacePill.style.background = 'rgba(255,255,255,0.06)';
-            workspacePill.style.color = '#dbe8f8';
+            workspacePill.style.background = 'rgba(0,0,0,0.06)';
+            workspacePill.style.border = '1px solid rgba(0,0,0,0.10)';
+            workspacePill.style.color = '#1A1A1A';
             workspacePill.style.fontSize = '12px';
             workspacePill.style.fontWeight = '700';
             controls.append(workspacePill);
@@ -3237,15 +3237,15 @@ function mountClipOverlay(
           refreshButton.type = 'button';
           refreshButton.textContent = isBridgeLoading ? 'Refreshing...' : 'Refresh';
           refreshButton.disabled = isBridgeLoading || isBridgeSending;
-          refreshButton.style.border = '0';
+          refreshButton.style.border = '1px solid rgba(0,0,0,0.10)';
           refreshButton.style.borderRadius = '10px';
           refreshButton.style.padding = '8px 10px';
           refreshButton.style.font = 'inherit';
           refreshButton.style.fontSize = '12px';
           refreshButton.style.fontWeight = '700';
           refreshButton.style.cursor = 'pointer';
-          refreshButton.style.background = 'rgba(255,255,255,0.08)';
-          refreshButton.style.color = '#edf3fb';
+          refreshButton.style.background = 'rgba(0,0,0,0.06)';
+          refreshButton.style.color = '#1A1A1A';
           refreshButton.addEventListener('click', () => {
             void refreshBridgeSessions(true);
           });
@@ -3277,16 +3277,18 @@ function mountClipOverlay(
               sessionButton.style.cursor = sessionButton.disabled ? 'default' : 'pointer';
               sessionButton.style.transition = 'background 120ms ease, border-color 120ms ease, color 120ms ease';
               sessionButton.style.background = isSentSession
-                ? 'rgba(20, 96, 62, 0.3)'
+                ? 'rgba(20, 96, 62, 0.12)'
                 : selectedClaudeSessionId === session.id
-                  ? 'rgba(83, 197, 255, 0.18)'
-                  : 'rgba(255,255,255,0.08)';
+                  ? '#15783D'
+                  : 'rgba(0,0,0,0.06)';
               sessionButton.style.borderColor = isSentSession
                 ? 'rgba(83, 211, 149, 0.28)'
                 : selectedClaudeSessionId === session.id
-                  ? 'rgba(83, 197, 255, 0.38)'
-                  : 'rgba(255,255,255,0.08)';
-              sessionButton.style.color = '#edf3fb';
+                  ? '#15783D'
+                  : 'rgba(0,0,0,0.10)';
+              sessionButton.style.color = selectedClaudeSessionId === session.id || isSentSession
+                ? (selectedClaudeSessionId === session.id ? '#FFFFFF' : '#15783D')
+                : '#1A1A1A';
               sessionButton.addEventListener('click', () => {
                 if (isBridgeLoading || isBridgeSending) {
                   return;
@@ -3319,7 +3321,7 @@ function mountClipOverlay(
                 : bridgeWorkspaces.length
                   ? 'No live sessions were found yet.'
                   : 'No live agent sessions were found.';
-            empty.style.color = '#9db2cf';
+            empty.style.color = '#867E78';
             empty.style.fontSize = '12px';
             empty.style.lineHeight = '1.45';
             sessionRow.append(empty);
@@ -3334,12 +3336,12 @@ function mountClipOverlay(
               packagePanel.style.marginTop = '10px';
               packagePanel.style.padding = '12px';
               packagePanel.style.borderRadius = '14px';
-              packagePanel.style.background = 'rgba(6, 12, 22, 0.56)';
-              packagePanel.style.border = '1px solid rgba(117, 204, 255, 0.14)';
+              packagePanel.style.background = 'rgba(0,0,0,0.03)';
+              packagePanel.style.border = '1px solid rgba(0,0,0,0.10)';
 
               const packageTitle = document.createElement('div');
               packageTitle.textContent = `Choose what to send to ${pendingSession.label}`;
-              packageTitle.style.color = '#edf3fb';
+              packageTitle.style.color = '#1A1A1A';
               packageTitle.style.fontSize = '12px';
               packageTitle.style.fontWeight = '700';
 
@@ -3355,11 +3357,11 @@ function mountClipOverlay(
                 presetButton.style.display = 'grid';
                 presetButton.style.gap = '4px';
                 presetButton.style.textAlign = 'left';
-                presetButton.style.border = '1px solid rgba(255,255,255,0.08)';
+                presetButton.style.border = '1px solid rgba(0,0,0,0.10)';
                 presetButton.style.borderRadius = '12px';
                 presetButton.style.padding = '10px 12px';
-                presetButton.style.background = 'rgba(255,255,255,0.04)';
-                presetButton.style.color = '#edf3fb';
+                presetButton.style.background = 'rgba(0,0,0,0.04)';
+                presetButton.style.color = '#1A1A1A';
                 presetButton.style.cursor = presetButton.disabled ? 'default' : 'pointer';
 
                 const presetLabel = document.createElement('div');
@@ -3371,7 +3373,7 @@ function mountClipOverlay(
                 presetDetail.textContent = presetConfig.detail;
                 presetDetail.style.fontSize = '11px';
                 presetDetail.style.lineHeight = '1.45';
-                presetDetail.style.color = '#b7c4da';
+                presetDetail.style.color = '#6B7280';
 
                 presetButton.append(presetLabel, presetDetail);
                 presetButton.addEventListener('click', () => {
@@ -3382,7 +3384,7 @@ function mountClipOverlay(
 
               const packageHint = document.createElement('div');
               packageHint.textContent = 'Replies stay in the target session. Snapclip only sends the local bundle one-way.';
-              packageHint.style.color = '#9db2cf';
+              packageHint.style.color = '#867E78';
               packageHint.style.fontSize = '11px';
               packageHint.style.lineHeight = '1.45';
 
@@ -3397,8 +3399,8 @@ function mountClipOverlay(
               packageDismiss.style.fontSize = '12px';
               packageDismiss.style.fontWeight = '700';
               packageDismiss.style.cursor = 'pointer';
-              packageDismiss.style.background = 'rgba(255,255,255,0.08)';
-              packageDismiss.style.color = '#edf3fb';
+              packageDismiss.style.background = 'rgba(0,0,0,0.06)';
+              packageDismiss.style.color = '#1A1A1A';
               packageDismiss.addEventListener('click', () => {
                 pendingPackageSessionId = '';
                 bridgeStatusMessage = '';
@@ -3807,18 +3809,21 @@ function mountClipOverlay(
         activeTool = 'text';
         syncActiveTool();
         setActionStatus('Text tool selected.');
+        stage.focus();
       });
 
       toolBoxButton.addEventListener('click', () => {
         activeTool = 'box';
         syncActiveTool();
         setActionStatus('Box tool selected.');
+        stage.focus();
       });
 
       toolArrowButton.addEventListener('click', () => {
         activeTool = 'arrow';
         syncActiveTool();
         setActionStatus('Arrow tool selected.');
+        stage.focus();
       });
 
       textComposerSave.addEventListener('click', saveTextAnnotation);
@@ -3890,7 +3895,7 @@ function mountClipOverlay(
 
       stage.addEventListener('blur', () => {
         stage.style.boxShadow = 'none';
-        stage.style.borderColor = 'rgba(157, 177, 207, 0.16)';
+        stage.style.borderColor = '#E4DED8';
       });
 
       stage.addEventListener('pointerenter', (event) => {
@@ -4119,7 +4124,7 @@ function mountClipOverlay(
               {
                 id: annotationId,
                 kind: 'box',
-                color: annotationColor,
+                color: boxAnnotationColor,
                 ...nextRect,
               },
             ];
@@ -4137,7 +4142,7 @@ function mountClipOverlay(
               {
                 id: annotationId,
                 kind: 'arrow',
-                color: annotationColor,
+                color: arrowAnnotationColor,
                 startX,
                 startY,
                 endX: point.x,
