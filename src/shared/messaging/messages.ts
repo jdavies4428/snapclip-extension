@@ -46,6 +46,10 @@ export type GetClipSessionMessage = {
   type: 'get-clip-session';
 };
 
+export type ClearClipSessionMessage = {
+  type: 'clear-clip-session';
+};
+
 export type GetBridgeWorkspacesMessage = {
   type: 'get-bridge-workspaces';
 };
@@ -146,6 +150,7 @@ export type SnapClipMessage =
   | OpenClipEditorMessage
   | CommitClipMessage
   | GetClipSessionMessage
+  | ClearClipSessionMessage
   | GetBridgeHealthMessage
   | GetBridgeWorkspacesMessage
   | GetBridgeSessionsMessage

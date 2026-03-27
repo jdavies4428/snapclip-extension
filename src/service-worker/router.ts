@@ -4,7 +4,7 @@ import { cancelClipOverlay, openSavedClipEditor, startClipWorkflow } from './cli
 import { loadBridgeActiveSessions, loadBridgeHealth, loadBridgeSessions, loadBridgeWorkspaces, sendClipToBridgeSession } from './bridge-handoff';
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
-import { getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
+import { clearClipSession, getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
 
 async function openSidePanelForActiveWindow(): Promise<void> {
   const tab = await getActiveTab();
@@ -90,6 +90,10 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
     }
     case 'get-clip-session': {
       const session = await getOrCreateSession();
+      return { ok: true, session };
+    }
+    case 'clear-clip-session': {
+      const session = await clearClipSession();
       return { ok: true, session };
     }
     case 'get-bridge-workspaces': {

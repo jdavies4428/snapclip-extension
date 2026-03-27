@@ -89,6 +89,7 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [pendingPackageMode, setPendingPackageMode] = useState<HandoffPackageMode | null>(null);
   const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const bridge = useBridgeState({
     enabled: pendingPackageMode !== null,
     reloadKey: pendingPackageMode ?? 'idle',
@@ -104,6 +105,46 @@ export default function App() {
   const preferredClipId = session?.activeClipId || clips[0]?.id || '';
   const bulkPackageConfig = pendingPackageMode ? getBulkPackageConfig(pendingPackageMode) : null;
 
+  async function resolveCaptureTargetTab(): Promise<(chrome.tabs.Tab & { id: number }) | null> {
+    const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
+    const preferredTab =
+      tabs.find((tab) => tab.active && typeof tab.id === 'number' && (tab.url?.startsWith('http:') || tab.url?.startsWith('https:'))) ||
+      tabs.find((tab) => typeof tab.id === 'number' && (tab.url?.startsWith('http:') || tab.url?.startsWith('https:')));
+
+    return preferredTab && typeof preferredTab.id === 'number'
+      ? (preferredTab as chrome.tabs.Tab & { id: number })
+      : null;
+  }
+
+  async function handleStartClip(clipMode: 'visible' | 'region') {
+    setIsCapturing(true);
+    setStatus(clipMode === 'visible' ? 'Clipping the current tab…' : 'Preparing the selector…');
+
+    try {
+      const tab = await resolveCaptureTargetTab();
+      if (typeof tab?.id !== 'number' || typeof tab.windowId !== 'number') {
+        throw new Error('No supported page tab was found.');
+      }
+
+      const response = (await chrome.runtime.sendMessage({
+        type: 'start-clip-workflow',
+        clipMode,
+        tabId: tab.id,
+        windowId: tab.windowId,
+      })) as SnapClipMessageResponse;
+
+      if (!response?.ok) {
+        throw new Error(response?.error || 'Failed to start clipping.');
+      }
+
+      setStatus(clipMode === 'visible' ? 'Captured the current tab.' : 'Selector launched on the current page.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to start clipping.');
+    } finally {
+      setIsCapturing(false);
+    }
+  }
+
   async function openClipEditor(clipId: string) {
     try {
       const response = (await chrome.runtime.sendMessage({
@@ -114,6 +155,18 @@ export default function App() {
       setStatus(response.ok ? 'Opened clip editor.' : response.error);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to open the clip editor.');
+    }
+  }
+
+  async function clearAllClips() {
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: 'clear-clip-session',
+      })) as SnapClipMessageResponse;
+
+      setStatus(response.ok ? 'Cleared all saved images.' : response.error);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to clear saved images.');
     }
   }
 
@@ -187,6 +240,21 @@ export default function App() {
     <main className="gallery-shell">
       <section className="gallery-actions">
         <div className="gallery-actions-copy">
+          <strong>Capture</strong>
+          <span>Keep the sidebar open and clip again without relying on shortcuts.</span>
+        </div>
+        <div className="gallery-actions-buttons">
+          <button disabled={isCapturing} onClick={() => void handleStartClip('visible')} type="button">
+            {isCapturing ? 'Working…' : 'Clip tab'}
+          </button>
+          <button className="secondary" disabled={isCapturing} onClick={() => void handleStartClip('region')} type="button">
+            Use selector
+          </button>
+        </div>
+      </section>
+
+      <section className="gallery-actions">
+        <div className="gallery-actions-copy">
           <strong>Saved images</strong>
           <span>Double-click a thumbnail to reopen it. Bulk send reuses one shared packet when you choose it.</span>
         </div>
@@ -196,6 +264,9 @@ export default function App() {
           </button>
           <button className="secondary" onClick={() => setPendingPackageMode('packet')} type="button">
             Send all + packet
+          </button>
+          <button className="secondary danger-button" onClick={() => void clearAllClips()} type="button">
+            Clear all
           </button>
         </div>
       </section>

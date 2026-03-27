@@ -56,14 +56,14 @@ body {
 
 .gallery-shell {
   min-height: 100vh;
-  padding: 12px;
+  padding: 10px;
 }
 
 .gallery-actions {
   display: grid;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px;
   border: 1px solid rgba(154, 177, 205, 0.16);
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.035);
@@ -75,7 +75,7 @@ body {
 }
 
 .gallery-actions-copy strong {
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
@@ -83,29 +83,30 @@ body {
 
 .gallery-actions-copy span {
   color: var(--text-1);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .gallery-actions-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .clip-gallery {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .clip-gallery-tile {
   position: relative;
   display: block;
   overflow: hidden;
-  min-height: 220px;
+  min-height: 152px;
   padding: 0;
   border: 1px solid rgba(154, 177, 205, 0.16);
-  border-radius: 22px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   box-shadow: 0 24px 48px rgba(1, 7, 18, 0.24);
 }
@@ -118,7 +119,7 @@ body {
 .clip-gallery-image {
   display: block;
   width: 100%;
-  min-height: 220px;
+  min-height: 152px;
   background: linear-gradient(180deg, rgba(13, 21, 34, 0.92), rgba(7, 13, 24, 0.96));
   object-fit: cover;
 }
@@ -137,8 +138,8 @@ body {
   bottom: 0;
   left: 0;
   display: grid;
-  gap: 4px;
-  padding: 16px 14px 14px;
+  gap: 2px;
+  padding: 12px 10px 10px;
   background: linear-gradient(180deg, rgba(4, 10, 18, 0.02) 0%, rgba(4, 10, 18, 0.9) 42%, rgba(4, 10, 18, 0.96) 100%);
   text-align: left;
 }
@@ -150,15 +151,15 @@ body {
 
 .clip-gallery-title {
   color: var(--text-0);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .clip-gallery-meta {
   color: var(--text-1);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .gallery-empty {
@@ -327,6 +328,16 @@ button.secondary {
 button.secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 12px 24px rgba(2, 10, 20, 0.18);
+}
+
+button.danger-button {
+  border-color: rgba(255, 132, 95, 0.2);
+  color: #ffd5c8;
+}
+
+button.danger-button:hover:not(:disabled) {
+  background: rgba(255, 132, 95, 0.1);
+  box-shadow: 0 12px 24px rgba(36, 10, 6, 0.18);
 }
 
 button:disabled,

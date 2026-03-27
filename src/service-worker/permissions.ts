@@ -120,7 +120,10 @@ export function assertSupportedTab(tab?: chrome.tabs.Tab): asserts tab is chrome
 }
 
 export async function getActiveTab(): Promise<chrome.tabs.Tab & { id: number }> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [lastFocusedTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const [currentWindowTab] = lastFocusedTab ? [null] : await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = lastFocusedTab ?? currentWindowTab;
+
   if (!tab || typeof tab.id !== 'number') {
     throw new Error('No active tab was found.');
   }

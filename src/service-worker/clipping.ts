@@ -1181,7 +1181,29 @@ function mountClipOverlay(
       sizeBadge.style.fontSize = '12px';
       sizeBadge.style.fontWeight = '600';
 
-      metaRow.append(clipModeBadge, sizeBadge);
+      const savedClipsBadge = document.createElement('div');
+      savedClipsBadge.textContent = 'Checking saved clips...';
+      savedClipsBadge.style.padding = '8px 10px';
+      savedClipsBadge.style.borderRadius = '999px';
+      savedClipsBadge.style.background = 'rgba(255,255,255,0.08)';
+      savedClipsBadge.style.color = '#d5e2f4';
+      savedClipsBadge.style.fontSize = '12px';
+      savedClipsBadge.style.fontWeight = '600';
+
+      metaRow.append(clipModeBadge, sizeBadge, savedClipsBadge);
+
+      void chrome.runtime
+        .sendMessage({
+          type: 'get-clip-session',
+        })
+        .then((response) => {
+          const savedClipCount = response?.ok && response.session?.clips ? response.session.clips.length : 0;
+          savedClipsBadge.textContent =
+            savedClipCount === 1 ? '1 saved clip in sidebar' : `${savedClipCount} saved clips in sidebar`;
+        })
+        .catch(() => {
+          savedClipsBadge.textContent = 'Saved clips unavailable';
+        });
 
       const contentGrid = document.createElement('div');
       contentGrid.style.display = 'grid';

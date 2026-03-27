@@ -10,7 +10,7 @@ const FALLBACK_SHORTCUT_LABELS: Record<ShortcutCommandName, string> = {
   'start-region-clip': 'Option/Alt + Shift + S',
   'start-visible-clip': 'Option/Alt + Shift + D',
   'open-last-clip-editor': 'Option/Alt + Shift + E',
-  'open-side-panel': 'Option/Alt + Shift + L',
+  'open-side-panel': 'Option/Alt + Shift + P',
 };
 
 export default function App() {

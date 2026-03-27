@@ -2,7 +2,7 @@ import type { ClipAnnotation, ClipHandoffRecord, ClipRecord, ClipSession, ClipSe
 import { STORAGE_KEYS, getClipStorageKey } from '../shared/snapshot/storage';
 import { clipRecordSchema, clipSessionIndexSchema, clipSessionSchema } from '../shared/types/session';
 import { createSnapshotId } from '../shared/utils/id';
-import { putClipAsset } from '../shared/storage/blob-store';
+import { deleteClipAsset, putClipAsset } from '../shared/storage/blob-store';
 import { z } from 'zod';
 
 const legacyClipRecordSchema = z.object({
@@ -341,5 +341,33 @@ export async function updateClipHandoff(clipId: string, handoff: ClipHandoffReco
     ...session,
     updatedAt,
     clips: session.clips.map((clip) => (clip.id === clipId ? updatedClip : clip)),
+  });
+}
+
+export async function clearClipSession(): Promise<ClipSession> {
+  const session = await ensureClipSession();
+
+  await Promise.all(
+    session.clips.map(async (clip) => {
+      await chrome.storage.local.remove(getClipStorageKey(clip.id));
+      await deleteClipAsset(clip.imageAssetId);
+    }),
+  );
+
+  const updatedAt = new Date().toISOString();
+  await saveClipSessionIndex({
+    id: session.id,
+    createdAt: session.createdAt,
+    updatedAt,
+    activeClipId: null,
+    clipIds: [],
+  });
+  await chrome.storage.local.remove(STORAGE_KEYS.lastCapturedClipId);
+
+  return clipSessionSchema.parse({
+    ...session,
+    updatedAt,
+    activeClipId: null,
+    clips: [],
   });
 }

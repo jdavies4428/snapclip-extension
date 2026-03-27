@@ -1,7 +1,7 @@
 import type { SnapClipMessage, SnapClipMessageResponse } from '../shared/messaging/messages';
 import { STORAGE_KEYS } from '../shared/snapshot/storage';
 import { openSavedClipEditor, startClipWorkflow } from './clipping';
-import { getSupportedActiveTab } from './permissions';
+import { ensureSupportedWindow, getActiveTab, getSupportedActiveTab } from './permissions';
 import { routeMessage } from './router';
 import { getClipSession, getStoredClipRecord } from './storage';
 
@@ -30,10 +30,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function openSidePanelForLastFocusedWindow() {
-  const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
-  const targetTab =
-    tabs.find((tab) => typeof tab.windowId === 'number' && tab.active) ??
-    tabs.find((tab) => typeof tab.windowId === 'number');
+  const targetTab = await getActiveTab();
 
   if (typeof targetTab?.id === 'number') {
     await chrome.sidePanel.open({ tabId: targetTab.id });
@@ -41,7 +38,7 @@ async function openSidePanelForLastFocusedWindow() {
   }
 
   if (typeof targetTab?.windowId === 'number') {
-    await chrome.sidePanel.open({ windowId: targetTab.windowId });
+    await chrome.sidePanel.open({ windowId: ensureSupportedWindow(targetTab.windowId) });
     return;
   }
 

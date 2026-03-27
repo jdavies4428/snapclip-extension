@@ -66,3 +66,12 @@ export async function getClipAssetBlob(id: string): Promise<Blob | null> {
     request.onerror = () => reject(request.error ?? new Error('Failed to load clip asset.'));
   });
 }
+
+export async function deleteClipAsset(id: string): Promise<void> {
+  await runTransaction<void>('readwrite', (store, resolve, reject) => {
+    const request = store.delete(id);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error('Failed to delete clip asset.'));
+  });
+}

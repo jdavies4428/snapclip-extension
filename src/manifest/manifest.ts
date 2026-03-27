@@ -36,8 +36,8 @@ export default defineManifest({
     },
     'open-side-panel': {
       suggested_key: {
-        default: 'Alt+Shift+L',
-        mac: 'Option+Shift+L',
+        default: 'Alt+Shift+P',
+        mac: 'Option+Shift+P',
       },
       description: 'Open the LLM Clip side panel.',
     },
