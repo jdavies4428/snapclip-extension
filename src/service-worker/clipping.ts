@@ -929,7 +929,8 @@ function mountClipOverlay(
       railHeader.append(titleTopRow, titleSub);
 
       const noteCard = document.createElement('div');
-      noteCard.style.display = 'grid';
+      noteCard.style.display = 'flex';
+      noteCard.style.flexDirection = 'column';
       noteCard.style.gap = '10px';
       noteCard.style.minHeight = '0';
 
@@ -951,8 +952,8 @@ function mountClipOverlay(
       const noteField = document.createElement('textarea');
       noteField.placeholder = 'What looks wrong? What should the model do next?';
       noteField.style.width = '100%';
-      noteField.style.minHeight = '0';
-      noteField.style.height = '100%';
+      noteField.style.flex = '1';
+      noteField.style.minHeight = '80px';
       noteField.style.boxSizing = 'border-box';
       noteField.style.resize = 'none';
       noteField.style.borderRadius = '16px';
@@ -2170,7 +2171,7 @@ function mountClipOverlay(
         noteField.focus();
       }, 30);
 
-      let activeTool: 'text' | 'box' | 'arrow' = 'box';
+      let activeTool: 'text' | 'box' | 'arrow' | null = null;
       let railMode: 'compose' | 'details' = 'compose';
       let editorStartPoint: { x: number; y: number } | null = null;
       let editorDraftShape:
@@ -2236,6 +2237,7 @@ function mountClipOverlay(
           }
         }
 
+        if (!activeTool) return 'Select a tool above to annotate';
         return activeTool === 'text'
           ? 'Click to add text'
           : activeTool === 'box'
@@ -2987,7 +2989,7 @@ function mountClipOverlay(
         setToolState(toolTextButton, activeTool === 'text');
         setToolState(toolBoxButton, activeTool === 'box');
         setToolState(toolArrowButton, activeTool === 'arrow');
-        stage.style.cursor = 'none';
+        stage.style.cursor = activeTool ? 'none' : 'default';
         renderSelectionHint();
         syncStageCursorBubble();
       };
@@ -3264,7 +3266,7 @@ function mountClipOverlay(
               sessionButton.type = 'button';
               const isSendingSession = isBridgeSending && activeClaudeSessionId === session.id;
               const isSentSession = !isBridgeSending && successfulClaudeSessionId === session.id;
-              const sessionTooltip = session.target === 'codex' && session.activityState ? session.activityState : session.label;
+              const sessionTooltip = session.target === 'codex' && session.activityState ? session.activityState : (session.workspaceName || session.label);
               sessionButton.textContent = isSendingSession ? 'Sending...' : isSentSession ? 'Sent' : session.label;
               sessionButton.title = sessionTooltip;
               sessionButton.disabled = isBridgeLoading || isBridgeSending;
@@ -3946,7 +3948,7 @@ function mountClipOverlay(
 
       syncActiveTool();
       syncRailMode();
-      setActionStatus('Box tool selected. Drag on the capture, or click an existing annotation to adjust it.');
+      setActionStatus('Select a tool above to annotate the capture.');
       if (!initialClip) {
         void autoCopyClipImage();
       }
@@ -3994,6 +3996,11 @@ function mountClipOverlay(
           editorStartPoint = null;
           stage.setPointerCapture(event.pointerId);
           announce('Drag to reposition the annotation.');
+          return;
+        }
+
+        if (!activeTool) {
+          setActionStatus('Select a tool above to annotate.');
           return;
         }
 
