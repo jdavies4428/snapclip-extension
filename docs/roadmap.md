@@ -13,7 +13,7 @@
 - direct Claude + Codex session delivery with bundle-preserved fallback
 - clip-level persisted handoff status (delivered / bundle_created / failed)
 - send modes: images+notes (lean) vs images+debug (full evidence packet)
-- Slack, Linear, Jira, Teams, Discord integrations (in-progress worktree)
+- Slack, Linear, Jira, Teams, Discord integrations (landed — IntegrationsPanel wired in side panel)
 - companion .pkg build script (bun --compile + pkgbuild)
 - full design system: limestone bg, forest green accent, Geist fonts
 
@@ -46,7 +46,7 @@ for the purpose of generating AI-ready incident packets. No persistent backgroun
 debugger attachment.
 
 **Chrome Web Store developer registration**
-One-time $5 fee at https://chrome.google.com/webstore/devconsole.
+~~One-time $5 fee~~ Done — account registered and verified, approval pending (a few days).
 
 ---
 
@@ -102,25 +102,25 @@ without any manual steps.
 
 ## Milestone 4: Team Tier
 
-Unlocks the $10/user/month tier. Integrations land first (in worktree), then:
+Unlocks the $10/user/month tier. Integrations have landed. Remaining work:
 
 ### Integration settings UI
 
-Integrations are implemented but inaccessible without a settings screen for tokens,
-webhook URLs, and OAuth flows. The Integrations tab is already wired in the side panel.
-Needs: credential entry forms per integration, test-connection buttons, stored state.
+IntegrationsPanel is wired in the side panel but needs working credential entry:
+token/webhook URL inputs per integration, test-connection buttons, and persisted state.
+`identity` and `alarms` permissions are already declared in the manifest.
 
 ### Teams OAuth (chrome.identity)
 
-Teams requires PKCE OAuth via `chrome.identity.launchWebAuthFlow`. Manifest needs
-the `identity` permission added. The OAuth relay in Stage 6 of the integration
-architecture (optional serverless backend) can be deferred — `chrome.identity` handles
-PKCE client-side.
+`chrome.identity` is in the manifest. Teams PKCE flow via `chrome.identity.launchWebAuthFlow`
+needs to be wired into the IntegrationsPanel settings. The serverless OAuth relay
+(Stage 6 in integration-architecture.md) can be deferred — `chrome.identity` handles
+PKCE client-side for now.
 
 ### Linear token setup
 
-Linear uses a user-supplied personal API token. Simpler than Slack/Teams auth.
-Settings UI handles this — no additional OAuth flow needed.
+Linear uses a user-supplied personal API token. Simpler than Slack/Teams.
+Credential entry form in IntegrationsPanel handles this — no OAuth flow needed.
 
 ---
 
@@ -174,21 +174,22 @@ a confirmation the session ends when the clip is saved.
 
 ## Shipping Stack Rank
 
-| # | Item | Blocks | Effort (CC) | Effort (human) |
-|---|------|--------|-------------|----------------|
-| 1 | Extension icons | CWS submission | ~15 min | 2 hrs design |
-| 2 | Privacy policy + store description | CWS submission | ~20 min | 2 hrs |
-| 3 | `debugger` justification | CWS review | ~10 min | 30 min |
-| 4 | Free tier cap | Monetization | ~20 min | 1 day |
-| 5 | Pro unlock + payment link | First dollar | ~1 hr | 1-2 days |
-| 6 | Integration settings UI | Team tier usable | ~30 min | 1 week |
-| 7 | Hook install button | New user activation | ~10 min | 2 hrs |
-| 8 | Companion download link in Bridge tab | New user activation | ~5 min | 30 min |
-| 9 | MCP server on bridge | Competitive parity | ~2 hrs | 1-2 days |
-| 10 | E2E smoke tests | Deploy confidence | ~30 min | 1 week |
-| 11 | Approval UX | Claude mid-task UX | ~20 min | 1 day |
-| 12 | Bounded debug mode UX | Polish / trust | ~30 min | 1 day |
+| # | Item | Blocks | Status | Effort (CC) |
+|---|------|--------|--------|-------------|
+| ~~0~~ | ~~CWS developer registration~~ | ~~CWS submission~~ | **Done** (approval pending) | — |
+| 1 | Extension icons | CWS submission | Todo | ~15 min |
+| 2 | Privacy policy + store description | CWS submission | Todo | ~20 min |
+| 3 | `debugger` justification | CWS review | Todo | ~10 min |
+| 4 | Free tier cap (50/mo) | Monetization | Todo | ~20 min |
+| 5 | Pro unlock + payment link | First dollar | Todo | ~1 hr |
+| 6 | Integration settings UI (credentials, test-connect) | Team tier usable | Todo | ~30 min |
+| 7 | Hook install button in Bridge tab | New user activation | Todo | ~10 min |
+| 8 | Companion download link in Bridge tab | New user activation | Todo | ~5 min |
+| 9 | MCP server on bridge | Competitive parity | Todo | ~2 hrs |
+| 10 | E2E smoke tests | Deploy confidence | Todo | ~30 min |
+| 11 | Approval UX (pending Claude permissions) | Claude mid-task UX | Todo | ~20 min |
+| 12 | Bounded debug mode UX | Polish / trust | Todo | ~30 min |
 
-**Shortest path to CWS submission:** items 1, 2, 3.
+**Shortest path to CWS submission:** items 1, 2, 3 (dev account already cleared).
 **Shortest path to first dollar:** add items 4 + 5.
-**Shortest path to Team tier:** integrations land + item 6.
+**Shortest path to Team tier:** item 6 (integrations already landed).
