@@ -29,17 +29,17 @@ function formatSessionLabel(session: BridgeSession): string {
 function getBulkPackageConfig(packageMode: HandoffPackageMode) {
   if (packageMode === 'image') {
     return {
-      actionLabel: 'Send all images',
-      modalTitle: 'Choose a session for all images',
-      modalCopy: 'Send all saved clip images in one ordered bundle. No shared packet files will be attached.',
+      actionLabel: 'Send images + notes',
+      modalTitle: 'Choose a session',
+      modalCopy: 'Sends all screenshots and your notes. No debug context or annotations attached.',
       evidenceProfile: 'lean' as const,
     };
   }
 
   return {
-    actionLabel: 'Send all + packet',
-    modalTitle: 'Choose a session for all images + packet',
-    modalCopy: 'Send all saved clip images plus one shared packet of notes, annotations, and local evidence.',
+    actionLabel: 'Send images + debug',
+    modalTitle: 'Choose a session',
+    modalCopy: 'Sends all screenshots, your notes, annotations, and the full debug evidence packet.',
     evidenceProfile: 'balanced' as const,
   };
 }
@@ -671,14 +671,14 @@ export default function App() {
                 onClick={() => setPendingPackageMode('image')}
                 type="button"
               >
-                Send all images
+                Send images + notes
               </button>
               <button
                 className="btn btn-primary"
                 onClick={() => setPendingPackageMode('packet')}
                 type="button"
               >
-                Send all + packet
+                Send images + debug
               </button>
             </div>
           </div>

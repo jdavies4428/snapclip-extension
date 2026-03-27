@@ -95,7 +95,6 @@ function buildPromptHeader(params: PromptParams): string[] {
     '# LLM Clip Incident Packet',
     '',
     `- Target: ${params.target}`,
-    `- Package mode: ${params.packageMode}`,
     `- Evidence profile: ${params.evidenceProfile}`,
     `- Scope: ${params.scope === 'session' ? `session (${params.session.clips.length} clips)` : 'active clip'}`,
     `- Active clip: ${sanitizeEvidenceText(params.activeClip.title)}`,
