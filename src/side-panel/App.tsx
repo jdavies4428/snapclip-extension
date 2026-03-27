@@ -243,8 +243,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'clips' | 'session' | 'bridge' | 'export'>('clips');
 
   const bridge = useBridgeState({
-    enabled: pendingPackageMode !== null,
-    reloadKey: pendingPackageMode ?? 'idle',
+    enabled: pendingPackageMode !== null || activeTab === 'bridge',
+    reloadKey: pendingPackageMode ?? (activeTab === 'bridge' ? 'bridge-tab' : 'idle'),
   });
 
   const clips = useMemo(
@@ -574,12 +574,33 @@ export default function App() {
           <div>
             <div className="section-header">
               <span className="section-title">Session</span>
+              {clips.length > 0 && (
+                <span className="bridge-status-pill">{clips.length} clip{clips.length !== 1 ? 's' : ''}</span>
+              )}
             </div>
-            <div className="panel-empty">
-              <p className="panel-empty-copy">
-                Session details will be shown here.
-              </p>
-            </div>
+            {clips.length === 0 ? (
+              <div className="panel-empty">
+                <p className="panel-empty-copy">No clips captured yet. Use the capture buttons above.</p>
+              </div>
+            ) : (
+              <div className="session-clip-list">
+                {clips.map((clip) => (
+                  <div key={clip.id} className="session-clip-row">
+                    <div className="session-clip-meta">
+                      <span className="session-clip-title">{clip.title || 'Untitled clip'}</span>
+                      <span className="session-clip-time">{new Date(clip.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => openClipEditor(clip.id)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -587,12 +608,50 @@ export default function App() {
           <div>
             <div className="section-header">
               <span className="section-title">Bridge</span>
+              {bridge.bridgeHealth && (
+                <span className="bridge-status-pill bridge-status-pill--connected">● connected</span>
+              )}
             </div>
-            <div className="panel-empty">
-              <p className="panel-empty-copy">
-                Bridge configuration and connection status will appear here.
-              </p>
-            </div>
+            {bridge.isBridgeLoading ? (
+              <div className="panel-empty"><p className="panel-empty-copy">Connecting to bridge…</p></div>
+            ) : bridge.bridgeError ? (
+              <div className="panel-empty"><p className="panel-empty-copy">{bridge.bridgeError}</p></div>
+            ) : bridge.bridgeHealth ? (
+              <div className="bridge-info">
+                <div className="bridge-info-row">
+                  <span className="bridge-info-label">Host</span>
+                  <span className="bridge-info-value">{bridge.bridgeHealth.companion.host}:{bridge.bridgeHealth.companion.port}</span>
+                </div>
+                <div className="bridge-info-row">
+                  <span className="bridge-info-label">Version</span>
+                  <span className="bridge-info-value">{bridge.bridgeHealth.companion.version}</span>
+                </div>
+                <div className="bridge-info-row">
+                  <span className="bridge-info-label">Claude CLI</span>
+                  <span className="bridge-info-value">{bridge.bridgeHealth.claude.cliAvailable ? (bridge.bridgeHealth.claude.cliVersion || 'available') : 'not found'}</span>
+                </div>
+                <div className="bridge-info-row">
+                  <span className="bridge-info-label">Hook</span>
+                  <span className="bridge-info-value">{bridge.bridgeHealth.claude.hookInstalled ? 'installed' : 'not installed'}</span>
+                </div>
+                {bridge.bridgeSessions.length > 0 && (
+                  <>
+                    <div className="section-divider" style={{ margin: '10px 0' }} />
+                    <p className="bridge-info-label" style={{ marginBottom: 8 }}>Live sessions</p>
+                    {bridge.bridgeSessions.map((s) => (
+                      <div key={s.id} className="bridge-session-row">
+                        <span className="bridge-session-label">{s.workspaceName || s.label}</span>
+                        <span className="bridge-session-target">{s.target}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="panel-empty">
+                <p className="panel-empty-copy">Bridge companion not running. Download it from the popup.</p>
+              </div>
+            )}
           </div>
         )}
 

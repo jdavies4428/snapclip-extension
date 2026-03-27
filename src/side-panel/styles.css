@@ -734,3 +734,108 @@ body {
   background: var(--bg);
   border-top: 1px solid var(--border);
 }
+
+/* ─── Session tab ─────────────────────────────────────────────────────── */
+.session-clip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 14px;
+}
+
+.session-clip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.session-clip-row:hover {
+  background: var(--surface-alt);
+}
+
+.session-clip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.session-clip-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-clip-time {
+  font-family: var(--font-mono, 'Geist Mono', monospace);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* ─── Bridge tab ──────────────────────────────────────────────────────── */
+.bridge-info {
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bridge-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bridge-info-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bridge-info-value {
+  font-family: var(--font-mono, 'Geist Mono', monospace);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.bridge-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.bridge-session-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-session-target {
+  font-family: var(--font-mono, 'Geist Mono', monospace);
+  font-size: 10px;
+  color: var(--accent);
+  flex-shrink: 0;
+}

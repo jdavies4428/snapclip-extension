@@ -1333,7 +1333,7 @@ function mountClipOverlay(
       stage.style.borderRadius = '18px';
       stage.style.overflow = 'hidden';
       stage.style.border = '1px solid #E4DED8';
-      stage.style.background = '#050811';
+      stage.style.background = '#EEE9E3';
       stage.style.cursor = 'none';
       stage.style.minHeight = '0';
       stage.style.touchAction = 'none';
