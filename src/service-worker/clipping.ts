@@ -839,8 +839,8 @@ function mountClipOverlay(
       editor.style.padding = '20px';
       editor.style.borderRadius = '28px';
       editor.style.background = '#F6F4F0';
-      editor.style.border = '1px solid #D0C9C2';
-      editor.style.boxShadow = '0 30px 96px rgba(0,0,0,0.18)';
+      editor.style.border = '2px solid #15783D';
+      editor.style.boxShadow = '0 30px 96px rgba(0,0,0,0.18), 0 0 0 1px rgba(21,120,61,0.15)';
       editor.style.color = '#111110';
       editor.style.fontFamily = "'Geist', 'Geist Sans', system-ui, sans-serif";
       editor.style.zIndex = '2147483647';
