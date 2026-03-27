@@ -2487,7 +2487,9 @@ function mountClipOverlay(
             return;
           }
 
-          drawText(annotation);
+          if (annotation.kind === 'text') {
+            drawText(annotation);
+          }
         });
 
         if (editorDraftShape?.kind === 'box') {
@@ -2624,7 +2626,7 @@ function mountClipOverlay(
       const boundsCache = () => stage.getBoundingClientRect();
 
       const translateAnnotation = (annotation: ClipAnnotation, deltaX: number, deltaY: number): ClipAnnotation => {
-        if (annotation.kind === 'box') {
+        if (annotation.kind === 'box' || annotation.kind === 'crop') {
           return {
             ...annotation,
             x: clamp(annotation.x + deltaX, 0, 100 - annotation.width),
@@ -2640,20 +2642,24 @@ function mountClipOverlay(
           };
         }
 
-        const minX = Math.min(annotation.startX, annotation.endX);
-        const maxX = Math.max(annotation.startX, annotation.endX);
-        const minY = Math.min(annotation.startY, annotation.endY);
-        const maxY = Math.max(annotation.startY, annotation.endY);
-        const safeDeltaX = clamp(deltaX, -minX, 100 - maxX);
-        const safeDeltaY = clamp(deltaY, -minY, 100 - maxY);
+        if (annotation.kind === 'arrow') {
+          const minX = Math.min(annotation.startX, annotation.endX);
+          const maxX = Math.max(annotation.startX, annotation.endX);
+          const minY = Math.min(annotation.startY, annotation.endY);
+          const maxY = Math.max(annotation.startY, annotation.endY);
+          const safeDeltaX = clamp(deltaX, -minX, 100 - maxX);
+          const safeDeltaY = clamp(deltaY, -minY, 100 - maxY);
 
-        return {
-          ...annotation,
-          startX: annotation.startX + safeDeltaX,
-          endX: annotation.endX + safeDeltaX,
-          startY: annotation.startY + safeDeltaY,
-          endY: annotation.endY + safeDeltaY,
-        };
+          return {
+            ...annotation,
+            startX: annotation.startX + safeDeltaX,
+            endX: annotation.endX + safeDeltaX,
+            startY: annotation.startY + safeDeltaY,
+            endY: annotation.endY + safeDeltaY,
+          };
+        }
+
+        return annotation;
       };
 
       const distanceToSegment = (
@@ -2685,7 +2691,7 @@ function mountClipOverlay(
         [...annotations]
           .reverse()
           .map((annotation) => {
-            if (annotation.kind === 'box') {
+            if (annotation.kind === 'box' || annotation.kind === 'crop') {
               const nearCorner =
                 Math.abs(point.x - (annotation.x + annotation.width)) <= 2 &&
                 Math.abs(point.y - (annotation.y + annotation.height)) <= 2;
@@ -2715,24 +2721,26 @@ function mountClipOverlay(
               return null;
             }
 
-            if (Math.hypot(point.x - annotation.startX, point.y - annotation.startY) <= 2) {
-              return { annotation, mode: 'resize-arrow-start' as const };
-            }
-            if (Math.hypot(point.x - annotation.endX, point.y - annotation.endY) <= 2) {
-              return { annotation, mode: 'resize-arrow-end' as const };
-            }
+            if (annotation.kind === 'arrow') {
+              if (Math.hypot(point.x - annotation.startX, point.y - annotation.startY) <= 2) {
+                return { annotation, mode: 'resize-arrow-start' as const };
+              }
+              if (Math.hypot(point.x - annotation.endX, point.y - annotation.endY) <= 2) {
+                return { annotation, mode: 'resize-arrow-end' as const };
+              }
 
-            if (
-              distanceToSegment(
-                point.x,
-                point.y,
-                annotation.startX,
-                annotation.startY,
-                annotation.endX,
-                annotation.endY,
-              ) <= 2.2
-            ) {
-              return { annotation, mode: 'move' as const };
+              if (
+                distanceToSegment(
+                  point.x,
+                  point.y,
+                  annotation.startX,
+                  annotation.startY,
+                  annotation.endX,
+                  annotation.endY,
+                ) <= 2.2
+              ) {
+                return { annotation, mode: 'move' as const };
+              }
             }
 
             return null;

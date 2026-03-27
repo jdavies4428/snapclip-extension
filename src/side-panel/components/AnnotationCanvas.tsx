@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipAnnotation, ClipRecord } from '../../shared/types/session';
 
 type AnnotationCanvasProps = {
@@ -7,7 +7,7 @@ type AnnotationCanvasProps = {
   onChange: (annotations: ClipAnnotation[]) => void;
 };
 
-type DrawingTool = 'box' | 'arrow' | 'text';
+type DrawingTool = 'box' | 'arrow' | 'text' | 'crop';
 
 type DraftShape =
   | {
@@ -23,6 +23,13 @@ type DraftShape =
       startY: number;
       endX: number;
       endY: number;
+    }
+  | {
+      kind: 'crop';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
     }
   | null;
 
@@ -61,27 +68,79 @@ function getTextAnnotationSize(text: string) {
   return { height, width };
 }
 
+const toolButtonBase: React.CSSProperties = {
+  fontFamily: 'Geist Sans, sans-serif',
+  fontSize: '11px',
+  fontWeight: 500,
+  padding: '4px 8px',
+  borderRadius: '5px',
+  border: '1px solid transparent',
+  background: 'transparent',
+  color: '#111110',
+  cursor: 'pointer',
+  lineHeight: 1.4,
+  transition: 'background 80ms, border-color 80ms, box-shadow 80ms',
+};
+
+const toolButtonActiveStyle: React.CSSProperties = {
+  background: '#FDFCFB',
+  borderColor: '#E4DED8',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+};
+
+const toolButtonHoverStyle: React.CSSProperties = {
+  background: '#EEE9E3',
+};
+
 function ToolButton({
   label,
+  keyHint,
   isActive,
   disabled = false,
   onClick,
+  style,
 }: {
   label: string;
+  keyHint?: string;
   isActive?: boolean;
   disabled?: boolean;
   onClick: () => void;
+  style?: React.CSSProperties;
 }) {
+  const [hovered, setHovered] = useState(false);
+
+  const computedStyle: React.CSSProperties = {
+    ...toolButtonBase,
+    ...(isActive ? toolButtonActiveStyle : hovered ? toolButtonHoverStyle : {}),
+    opacity: disabled ? 0.4 : 1,
+    cursor: disabled ? 'default' : 'pointer',
+    ...style,
+  };
+
   return (
     <button
       aria-label={label}
       aria-pressed={isActive}
-      className={`annotation-tool-button ${isActive ? 'annotation-tool-button-active' : ''}`}
       disabled={disabled}
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={computedStyle}
       type="button"
     >
       {label}
+      {keyHint ? (
+        <span
+          style={{
+            fontFamily: 'Geist Mono, monospace',
+            fontSize: '9px',
+            opacity: 0.5,
+            marginLeft: '3px',
+          }}
+        >
+          {keyHint}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -107,7 +166,7 @@ function distanceToSegment(
 }
 
 function translateAnnotation(annotation: ClipAnnotation, deltaX: number, deltaY: number): ClipAnnotation {
-  if (annotation.kind === 'box') {
+  if (annotation.kind === 'box' || annotation.kind === 'crop') {
     return {
       ...annotation,
       x: clamp(annotation.x + deltaX, 0, 100 - annotation.width),
@@ -147,7 +206,7 @@ function hitTestAnnotation(
     [...annotations]
       .reverse()
       .map((annotation) => {
-        if (annotation.kind === 'box') {
+        if (annotation.kind === 'box' || annotation.kind === 'crop') {
           const nearCorner =
             Math.abs(point.x - (annotation.x + annotation.width)) <= 2 &&
             Math.abs(point.y - (annotation.y + annotation.height)) <= 2;
@@ -212,8 +271,6 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(clip.annotations.at(-1)?.id ?? null);
   const [textComposer, setTextComposer] = useState<TextComposerState | null>(null);
   const [composerDragOffset, setComposerDragOffset] = useState<{ x: number; y: number } | null>(null);
-
-  const annotationColor = '#ff8a5b';
 
   const previewAnnotations = useMemo(() => clip.annotations, [clip.annotations]);
   const selectedAnnotation = useMemo(
@@ -283,7 +340,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
     const nextAnnotation: ClipAnnotation = {
       id: `annotation_${Date.now()}`,
       kind: 'text',
-      color: annotationColor,
+      color: '#FFFFFF',
       text: textComposer.text.trim(),
       x: textComposer.x,
       y: textComposer.y,
@@ -331,7 +388,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
         return translateAnnotation(annotation, deltaX, deltaY);
       }
 
-      if (annotation.kind === 'box') {
+      if (annotation.kind === 'box' || annotation.kind === 'crop') {
         return {
           ...annotation,
           width: clamp(annotation.width + deltaX, 1, 100 - annotation.x),
@@ -416,6 +473,12 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
     if (event.key === 'a' || event.key === 'A') {
       event.preventDefault();
       setActiveTool('arrow');
+      return;
+    }
+
+    if (event.key === 'c' || event.key === 'C') {
+      event.preventDefault();
+      setActiveTool('crop');
       return;
     }
 
@@ -512,7 +575,9 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
           annotation.id === movingAnnotation.id
             ? movingAnnotation.mode === 'move'
               ? translateAnnotation(movingAnnotation.original, deltaX, deltaY)
-              : movingAnnotation.mode === 'resize-box' && movingAnnotation.original.kind === 'box'
+              : movingAnnotation.mode === 'resize-box' &&
+                  (movingAnnotation.original.kind === 'box' ||
+                    movingAnnotation.original.kind === 'crop')
                 ? {
                     ...movingAnnotation.original,
                     width: clamp(point.x - movingAnnotation.original.x, 1, 100 - movingAnnotation.original.x),
@@ -550,6 +615,14 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
       return;
     }
 
+    if (activeTool === 'crop') {
+      setDraftShape({
+        kind: 'crop',
+        ...toPercentRect(startPoint.x, startPoint.y, event.clientX, event.clientY, rect),
+      });
+      return;
+    }
+
     if (activeTool === 'arrow') {
       const start = {
         x: (startPoint.x / rect.width) * 100,
@@ -572,6 +645,25 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
+      // Commit resize-box for blur/crop the same way as box
+      if (movingAnnotation.mode === 'resize-box' && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const point = toPercentPoint(event.clientX, event.clientY, rect);
+        const original = movingAnnotation.original;
+        if (original.kind === 'crop') {
+          onChange(
+            clip.annotations.map((annotation) =>
+              annotation.id === movingAnnotation.id
+                ? {
+                    ...original,
+                    width: clamp(point.x - original.x, 1, 100 - original.x),
+                    height: clamp(point.y - original.y, 1, 100 - original.y),
+                  }
+                : annotation,
+            ),
+          );
+        }
+      }
       setMovingAnnotation(null);
       return;
     }
@@ -587,7 +679,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
 
     const rect = containerRef.current.getBoundingClientRect();
 
-    if (activeTool === 'box') {
+    if (activeTool === 'box' || activeTool === 'crop') {
       const nextRect = toPercentRect(startPoint.x, startPoint.y, event.clientX, event.clientY, rect);
       setStartPoint(null);
       setDraftShape(null);
@@ -596,12 +688,11 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
         return;
       }
 
-      const nextAnnotation: ClipAnnotation = {
-        id: `annotation_${Date.now()}`,
-        kind: 'box',
-        color: annotationColor,
-        ...nextRect,
-      };
+      const nextAnnotation: ClipAnnotation =
+        activeTool === 'crop'
+          ? { id: `annotation_${Date.now()}`, kind: 'crop', ...nextRect }
+          : { id: `annotation_${Date.now()}`, kind: 'box', color: '#E8960A', ...nextRect };
+
       onChange([...clip.annotations, nextAnnotation]);
       setSelectedAnnotationId(nextAnnotation.id);
       return;
@@ -623,7 +714,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
     const nextAnnotation: ClipAnnotation = {
       id: `annotation_${Date.now()}`,
       kind: 'arrow',
-      color: annotationColor,
+      color: '#CC2B2B',
       startX: start.x,
       startY: start.y,
       endX: end.x,
@@ -635,14 +726,28 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
 
   return (
     <section className="annotation-shell">
-      <div aria-label="Annotation tools" className="annotation-toolbar" role="toolbar">
-        <ToolButton isActive={activeTool === 'text'} label="Text" onClick={() => setActiveTool('text')} />
-        <ToolButton isActive={activeTool === 'box'} label="Box" onClick={() => setActiveTool('box')} />
-        <ToolButton isActive={activeTool === 'arrow'} label="Arrow" onClick={() => setActiveTool('arrow')} />
+      <div
+        aria-label="Annotation tools"
+        role="toolbar"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '2px',
+          padding: '4px 8px',
+          background: '#F6F4F0',
+          borderBottom: '1px solid #E4DED8',
+          flexShrink: 0,
+        }}
+      >
+        <ToolButton isActive={activeTool === 'box'} keyHint="B" label="⊡ Box" onClick={() => setActiveTool('box')} />
+        <ToolButton isActive={activeTool === 'arrow'} keyHint="A" label="↗ Arrow" onClick={() => setActiveTool('arrow')} />
+        <ToolButton isActive={activeTool === 'text'} keyHint="T" label="T Text" onClick={() => setActiveTool('text')} />
+        <ToolButton isActive={activeTool === 'crop'} keyHint="C" label="✂ Crop" onClick={() => setActiveTool('crop')} />
         <ToolButton
           disabled={clip.annotations.length === 0}
           label="Undo"
           onClick={() => onChange(clip.annotations.slice(0, -1))}
+          style={{ marginLeft: 'auto' }}
         />
       </div>
 
@@ -671,7 +776,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
       ) : null}
 
       <div
-        aria-label="Annotation canvas. Press T for text, B for box, A for arrow, brackets to change selection, arrow keys to move the selected annotation, Shift plus arrow keys to resize it, Delete to remove it, and Escape to cancel."
+        aria-label="Annotation canvas. Press T for text, B for box, A for arrow, C for crop, brackets to change selection, arrow keys to move the selected annotation, Shift plus arrow keys to resize it, Delete to remove it, and Escape to cancel."
         className="annotation-stage annotation-stage-drawing"
         onKeyDown={handleStageKeyDown}
         onPointerCancel={finishPointer}
@@ -861,6 +966,74 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
               );
             }
 
+            if (annotation.kind === 'crop') {
+              return (
+                <g key={annotation.id}>
+                  {/* Dark overlay outside the crop region — four rectangles around the crop rect */}
+                  {/* Top */}
+                  <rect fill="rgba(0,0,0,0.4)" height={annotation.y} width="100" x="0" y="0" />
+                  {/* Bottom */}
+                  <rect
+                    fill="rgba(0,0,0,0.4)"
+                    height={100 - annotation.y - annotation.height}
+                    width="100"
+                    x="0"
+                    y={annotation.y + annotation.height}
+                  />
+                  {/* Left */}
+                  <rect
+                    fill="rgba(0,0,0,0.4)"
+                    height={annotation.height}
+                    width={annotation.x}
+                    x="0"
+                    y={annotation.y}
+                  />
+                  {/* Right */}
+                  <rect
+                    fill="rgba(0,0,0,0.4)"
+                    height={annotation.height}
+                    width={100 - annotation.x - annotation.width}
+                    x={annotation.x + annotation.width}
+                    y={annotation.y}
+                  />
+                  <rect
+                    fill="none"
+                    height={annotation.height}
+                    rx="1.4"
+                    ry="1.4"
+                    stroke="#15783D"
+                    strokeDasharray="2.2 1.4"
+                    strokeWidth="0.5"
+                    width={annotation.width}
+                    x={annotation.x}
+                    y={annotation.y}
+                  />
+                  {isSelected ? (
+                    <>
+                      <rect
+                        fill="none"
+                        height={annotation.height}
+                        rx="1.8"
+                        ry="1.8"
+                        stroke="#70c8ff"
+                        strokeDasharray="1.6 1.1"
+                        strokeWidth="0.32"
+                        width={annotation.width}
+                        x={annotation.x}
+                        y={annotation.y}
+                      />
+                      <circle
+                        cx={annotation.x + annotation.width}
+                        cy={annotation.y + annotation.height}
+                        fill="#70c8ff"
+                        r="0.9"
+                      />
+                    </>
+                  ) : null}
+                </g>
+              );
+            }
+
             const textSize = getTextAnnotationSize(annotation.text);
 
             return (
@@ -880,11 +1053,11 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
 
           {draftShape?.kind === 'box' ? (
             <rect
-              fill="#ff8a5b11"
+              fill="#E8960A11"
               height={draftShape.height}
               rx="1.4"
               ry="1.4"
-              stroke="#ff8a5b"
+              stroke="#E8960A"
               strokeDasharray="2 1.5"
               strokeWidth="0.45"
               width={draftShape.width}
@@ -895,7 +1068,7 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
 
           {draftShape?.kind === 'arrow' ? (
             <line
-              stroke="#ff8a5b"
+              stroke="#CC2B2B"
               strokeDasharray="2 1.5"
               strokeLinecap="round"
               strokeWidth="0.7"
@@ -904,6 +1077,49 @@ export function AnnotationCanvas({ clip, imageUrl, onChange }: AnnotationCanvasP
               y1={draftShape.startY}
               y2={draftShape.endY}
             />
+          ) : null}
+
+          {draftShape?.kind === 'crop' ? (
+            <g>
+              {/* Top */}
+              <rect fill="rgba(0,0,0,0.3)" height={draftShape.y} width="100" x="0" y="0" />
+              {/* Bottom */}
+              <rect
+                fill="rgba(0,0,0,0.3)"
+                height={100 - draftShape.y - draftShape.height}
+                width="100"
+                x="0"
+                y={draftShape.y + draftShape.height}
+              />
+              {/* Left */}
+              <rect
+                fill="rgba(0,0,0,0.3)"
+                height={draftShape.height}
+                width={draftShape.x}
+                x="0"
+                y={draftShape.y}
+              />
+              {/* Right */}
+              <rect
+                fill="rgba(0,0,0,0.3)"
+                height={draftShape.height}
+                width={100 - draftShape.x - draftShape.width}
+                x={draftShape.x + draftShape.width}
+                y={draftShape.y}
+              />
+              <rect
+                fill="none"
+                height={draftShape.height}
+                rx="1.4"
+                ry="1.4"
+                stroke="#15783D"
+                strokeDasharray="2.2 1.4"
+                strokeWidth="0.5"
+                width={draftShape.width}
+                x={draftShape.x}
+                y={draftShape.y}
+              />
+            </g>
           ) : null}
         </svg>
       </div>

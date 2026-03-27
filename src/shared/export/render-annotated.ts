@@ -65,14 +65,16 @@ export async function renderAnnotatedClipBlob(clip: ClipRecord, sourceImage: Blo
       continue;
     }
 
-    const x = (annotation.x / 100) * imageBitmap.width;
-    const y = (annotation.y / 100) * imageBitmap.height;
-    context.font = `${Math.max(16, Math.round(imageBitmap.width * 0.024))}px "SF Pro Display", "Segoe UI", sans-serif`;
-    context.fillStyle = annotation.color;
-    context.strokeStyle = 'rgba(8, 15, 28, 0.85)';
-    context.lineWidth = Math.max(4, Math.round(Math.max(imageBitmap.width, imageBitmap.height) * 0.006));
-    context.strokeText(annotation.text, x, y);
-    context.fillText(annotation.text, x, y);
+    if (annotation.kind === 'text') {
+      const x = (annotation.x / 100) * imageBitmap.width;
+      const y = (annotation.y / 100) * imageBitmap.height;
+      context.font = `${Math.max(16, Math.round(imageBitmap.width * 0.024))}px "SF Pro Display", "Segoe UI", sans-serif`;
+      context.fillStyle = annotation.color;
+      context.strokeStyle = 'rgba(8, 15, 28, 0.85)';
+      context.lineWidth = Math.max(4, Math.round(Math.max(imageBitmap.width, imageBitmap.height) * 0.006));
+      context.strokeText(annotation.text, x, y);
+      context.fillText(annotation.text, x, y);
+    }
   }
 
   imageBitmap.close();

@@ -1,24 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
 :root {
-  color: #edf2fb;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(95, 161, 255, 0.22), transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(255, 138, 91, 0.12), transparent 30%),
-    linear-gradient(180deg, #0d1320 0%, #090e17 100%);
-  font-family: "SF Pro Display", "Segoe UI", sans-serif;
-  color-scheme: dark;
+  --bg:        #F6F4F0;
+  --surface:   #FDFCFB;
+  --surface-2: #EEE9E3;
+  --border:    #E4DED8;
+  --text:      #111110;
+  --muted:     #867E78;
+  --accent:    #15783D;
+  --accent-h:  #0F5F2E;
+  --accent-bg: #EBF5EF;
+  --error:     #CC2B2B;
+  --amber:     #E8960A;
+  --amber-bg:  #FEF3DC;
+  --amber-border: #F5D48A;
+
+  font-family: 'Geist', 'Geist Sans', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
 }
 
 html,
 body,
 #root {
-  width: 428px;
-  min-width: 428px;
-  min-height: 620px;
+  width: 400px;
+  min-width: 400px;
 }
 
 body {
   margin: 0;
-  min-width: 428px;
+  background: var(--bg);
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -29,6 +41,7 @@ input {
 }
 
 * {
+  box-sizing: border-box;
   scrollbar-width: none;
 }
 
@@ -37,307 +50,312 @@ input {
   height: 0;
 }
 
+/* ─── Reset default button styles ─── */
 button {
-  border: 0;
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: linear-gradient(135deg, #6ccaff 0%, #407eff 100%);
-  color: #04111e;
-  font-weight: 700;
+  border: none;
   cursor: pointer;
   transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    background 180ms ease,
-    opacity 180ms ease;
-}
-
-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(57, 126, 255, 0.24);
-}
-
-button:active:not(:disabled) {
-  transform: translateY(0);
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
 }
 
 button:disabled {
-  opacity: 0.68;
+  opacity: 0.55;
   cursor: progress;
-  transform: none;
-  box-shadow: none;
 }
 
 button:focus-visible {
-  outline: 2px solid rgba(108, 202, 255, 0.95);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
+/* ─── Shell ─── */
 .popup-shell {
-  display: grid;
-  gap: 10px;
-  min-height: 620px;
-  padding: 12px;
-  overflow: visible;
-  position: relative;
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--bg);
 }
 
-.popup-shell::before {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border-radius: 22px;
-  border: 1px solid rgba(153, 177, 210, 0.14);
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 55%);
-}
-
-.popup-header,
-.shortcut-panel,
-.action-card,
-.utility-button,
-.shortcut-chip {
-  position: relative;
-  z-index: 1;
-}
-
+/* ─── Header ─── */
 .popup-header {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .brand-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(108, 202, 255, 0.24), rgba(64, 126, 255, 0.12)),
-    rgba(8, 15, 28, 0.9);
-  color: #dcedff;
-  border: 1px solid rgba(127, 182, 255, 0.18);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.brand-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.hero-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.popup-header h1 {
-  margin: 0;
-  font-size: 21px;
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  max-width: none;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #7fb6ff;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.status-badge,
-.panel-hint,
-.mode-description,
-.status,
-.action-copy,
-.lede {
-  margin: 0;
-  color: #b9c5da;
-  line-height: 1.45;
-}
-
-.status-badge {
-  font-size: 12px;
-}
-
-.lede {
-  font-size: 11px;
-  max-width: none;
-}
-
-.close-button {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 999px;
-}
-
-.action-stack,
-.shortcut-panel,
-.utility-row,
-.footer-stack {
-  display: grid;
   gap: 8px;
 }
 
-.action-stack {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
-.action-card {
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  text-align: left;
-  min-height: 94px;
-  padding: 10px 11px;
-  border-radius: 16px;
-  border: 1px solid rgba(156, 178, 209, 0.14);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
-    rgba(11, 16, 28, 0.9);
-  color: #eef4fb;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+.brand-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
 }
 
-.action-card:hover:not(:disabled) {
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-}
-
-.action-card-primary {
-  border-color: rgba(108, 202, 255, 0.24);
-  background:
-    linear-gradient(135deg, rgba(108, 202, 255, 0.16), rgba(64, 126, 255, 0.08)),
-    rgba(11, 16, 28, 0.95);
-}
-
-.action-kicker {
-  color: #7fb6ff;
+/* Bridge status chips */
+.bridge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-family: 'Geist Mono', 'Geist_Mono', monospace;
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.action-title {
+.bridge-chip-connected {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.bridge-chip-checking {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/* ─── Companion banner ─── */
+.companion-banner {
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+}
+
+.companion-banner-title {
+  margin: 0 0 3px;
   font-size: 13px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  color: var(--text);
 }
 
-.action-copy {
-  font-size: 11px;
+.companion-banner-body {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
-.shortcut-panel {
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(156, 178, 209, 0.14);
-  background: rgba(10, 15, 27, 0.74);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+.companion-download-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.panel-head {
+.companion-download-link:hover {
+  color: var(--accent-h);
+  text-decoration: underline;
+}
+
+/* ─── Main content padding ─── */
+.popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+/* ─── Action grid ─── */
+.action-stack {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.panel-hint {
-  font-size: 11px;
+.action-stack-full {
+  margin-top: 2px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
   text-align: left;
-  max-width: none;
+  line-height: 1;
+}
+
+.action-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.action-btn-primary:hover:not(:disabled) {
+  background: var(--accent-h);
+}
+
+.action-btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.action-btn-secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.action-btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  width: 100%;
+  justify-content: center;
+  font-weight: 500;
+}
+
+.action-btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.action-btn-label {
+  flex: 1;
+}
+
+.action-btn-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-family: 'Geist Mono', 'Geist_Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.action-btn-secondary .action-btn-kbd {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* ─── Shortcuts section ─── */
+.shortcut-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcut-panel-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
 }
 
 .shortcut-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .shortcut-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 11px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #dbe6f7;
-  font-size: 12px;
-  font-weight: 600;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .shortcut-chip-warning {
-  border: 1px solid rgba(255, 184, 82, 0.28);
-  background:
-    linear-gradient(180deg, rgba(255, 184, 82, 0.08), rgba(255, 184, 82, 0.03)),
-    rgba(255, 255, 255, 0.05);
+  border-color: var(--amber-border);
+  background: var(--amber-bg);
+}
+
+.shortcut-chip span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 0;
 }
 
 .shortcut-chip kbd {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 96px;
-  padding: 5px 8px;
-  border-radius: 9px;
-  background: rgba(8, 15, 28, 0.92);
-  border: 1px solid rgba(127, 182, 255, 0.16);
-  color: #9fd6ff;
-  font: inherit;
-  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-family: 'Geist Mono', 'Geist_Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.shortcut-chip span {
-  min-width: 0;
-}
-
+/* ─── Utility row ─── */
 .utility-row {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.ghost-button,
-.utility-button {
-  background: rgba(255, 255, 255, 0.08);
-  color: #eef4fb;
-  border: 1px solid rgba(156, 178, 209, 0.12);
-}
-
-.ghost-button:hover:not(:disabled),
-.utility-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-}
-
+/* ─── Footer ─── */
 .footer-stack {
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 16px 14px;
 }
 
 .status {
+  margin: 0;
   font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(156, 178, 209, 0.12);
+  color: var(--text);
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .mode-description {
+  margin: 0;
   font-size: 11px;
-  color: #9fb0cb;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ─── Divider ─── */
+.section-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {

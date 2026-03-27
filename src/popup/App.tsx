@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 
+const BRIDGE_HEALTH_URL = 'http://127.0.0.1:4311/health';
+const COMPANION_DOWNLOAD_URL = 'https://github.com/jdavies4428/snapclip-extension/releases/latest/download/SnapClipBridge.pkg';
+
+type BridgeStatus = 'checking' | 'connected' | 'missing';
+
 type ShortcutCommandName =
   | 'start-region-clip'
   | 'start-visible-clip'
@@ -17,6 +22,7 @@ export default function App() {
   const [status, setStatus] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [shortcutLabels, setShortcutLabels] = useState<Record<ShortcutCommandName, string>>(FALLBACK_SHORTCUT_LABELS);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>('checking');
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +51,20 @@ export default function App() {
     }
 
     void loadShortcutLabels();
+
+    async function checkBridge() {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(BRIDGE_HEALTH_URL, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!cancelled) setBridgeStatus(res.ok ? 'connected' : 'missing');
+      } catch {
+        if (!cancelled) setBridgeStatus('missing');
+      }
+    }
+
+    void checkBridge();
 
     return () => {
       cancelled = true;
@@ -125,98 +145,125 @@ export default function App() {
     <main className="popup-shell">
       <header className="popup-header">
         <div className="brand-row">
-          <div className="brand-mark" aria-hidden="true">
-            LC
-          </div>
-          <div className="brand-copy">
-            <p className="eyebrow">LLM Clip</p>
-            <p className="status-badge">Local-first capture</p>
-          </div>
-          <button
-            aria-label="Close popup"
-            className="ghost-button close-button"
-            onClick={() => window.close()}
-            type="button"
-          >
-            X
-          </button>
+          <div className="brand-dot" aria-hidden="true" />
+          <span className="brand-name">SnapClip</span>
         </div>
-        <div className="hero-copy">
-          <h1>Clip the tab, hand off the evidence.</h1>
-          <p className="lede">
-            Fast launcher. Shortcuts stay primary. Everything stays local.
-          </p>
-        </div>
+        {bridgeStatus === 'connected' && (
+          <span className="bridge-chip bridge-chip-connected" aria-label="Bridge connected">
+            ● bridge
+          </span>
+        )}
+        {bridgeStatus === 'checking' && (
+          <span className="bridge-chip bridge-chip-checking" aria-label="Checking bridge">
+            ○ checking
+          </span>
+        )}
       </header>
 
-      <section className="action-stack" aria-label="Clip actions">
-        <button
-          className="action-card action-card-primary"
-          disabled={isLoading}
-          onClick={() => handleStartClip('visible')}
-          type="button"
-        >
-          <span className="action-kicker">Fast path</span>
-          <span className="action-title">{isLoading ? 'Working...' : 'Clip tab'}</span>
-          <span className="action-copy">Capture the viewport.</span>
-        </button>
-        <button
-          className="action-card"
-          disabled={isLoading}
-          onClick={() => handleStartClip('region')}
-          type="button"
-        >
-          <span className="action-kicker">Targeted path</span>
-          <span className="action-title">Use selector</span>
-          <span className="action-copy">Drag the exact region.</span>
-        </button>
-      </section>
-
-      <section className="shortcut-panel" aria-label="Keyboard shortcuts">
-        <div className="panel-head">
-          <p className="eyebrow">Shortcuts</p>
-          <p className="panel-hint">Use these for the fast path instead of opening the full editor.</p>
-        </div>
-        <div className="shortcut-list">
-          <div className="shortcut-chip">
-            <span>Area</span>
-            <kbd>{shortcutLabels['start-region-clip']}</kbd>
-          </div>
-          <div className="shortcut-chip">
-            <span>Visible</span>
-            <kbd>{shortcutLabels['start-visible-clip']}</kbd>
-          </div>
-          <div
-            className={`shortcut-chip ${
-              shortcutLabels['open-last-clip-editor'] === 'Set in Chrome shortcuts' ? 'shortcut-chip-warning' : ''
-            }`}
+      {bridgeStatus === 'missing' && (
+        <section className="companion-banner" aria-label="Companion required">
+          <p className="companion-banner-title">Companion needed for AI handoff</p>
+          <p className="companion-banner-body">
+            Capture and annotate still work without it.
+          </p>
+          <a
+            className="companion-download-link"
+            href={COMPANION_DOWNLOAD_URL}
+            rel="noreferrer"
+            target="_blank"
           >
-            <span>Edit latest</span>
-            <kbd>{shortcutLabels['open-last-clip-editor']}</kbd>
-          </div>
-          <div
-            className={`shortcut-chip ${
-              shortcutLabels['open-side-panel'] === 'Set in Chrome shortcuts' ? 'shortcut-chip-warning' : ''
-            }`}
-          >
-            <span>Open panel</span>
-            <kbd>{shortcutLabels['open-side-panel']}</kbd>
-          </div>
-        </div>
-      </section>
+            Download companion →
+          </a>
+        </section>
+      )}
 
-      <section className="utility-row" aria-label="Secondary actions">
-        <button className="ghost-button utility-button" onClick={handleOpenPanel} type="button">
-          Open side panel
-        </button>
-        <button className="ghost-button utility-button" onClick={() => window.close()} type="button">
-          Dismiss
-        </button>
-      </section>
+      <div className="popup-body">
+        <section aria-label="Clip actions">
+          <div className="action-stack">
+            <button
+              className="action-btn action-btn-primary"
+              disabled={isLoading}
+              onClick={() => handleStartClip('visible')}
+              type="button"
+            >
+              <span className="action-btn-label">
+                {isLoading ? 'Working...' : 'Capture Tab'}
+              </span>
+              <span className="action-btn-kbd">{shortcutLabels['start-visible-clip']}</span>
+            </button>
+            <button
+              className="action-btn action-btn-secondary"
+              disabled={isLoading}
+              onClick={() => handleStartClip('region')}
+              type="button"
+            >
+              <span className="action-btn-label">Clip Region</span>
+              <span className="action-btn-kbd">{shortcutLabels['start-region-clip']}</span>
+            </button>
+          </div>
+          <div className="action-stack-full">
+            <button
+              className="action-btn action-btn-ghost"
+              disabled={isLoading}
+              onClick={() => handleStartClip('visible')}
+              type="button"
+            >
+              Full Page
+            </button>
+          </div>
+        </section>
+
+        <div className="section-divider" />
+
+        <section className="shortcut-panel" aria-label="Keyboard shortcuts">
+          <p className="shortcut-panel-label">Shortcuts</p>
+          <div className="shortcut-list">
+            <div className="shortcut-chip">
+              <span>Clip region</span>
+              <kbd>{shortcutLabels['start-region-clip']}</kbd>
+            </div>
+            <div className="shortcut-chip">
+              <span>Clip tab</span>
+              <kbd>{shortcutLabels['start-visible-clip']}</kbd>
+            </div>
+            <div
+              className={`shortcut-chip${
+                shortcutLabels['open-last-clip-editor'] === 'Set in Chrome shortcuts'
+                  ? ' shortcut-chip-warning'
+                  : ''
+              }`}
+            >
+              <span>Edit latest</span>
+              <kbd>{shortcutLabels['open-last-clip-editor']}</kbd>
+            </div>
+            <div
+              className={`shortcut-chip${
+                shortcutLabels['open-side-panel'] === 'Set in Chrome shortcuts'
+                  ? ' shortcut-chip-warning'
+                  : ''
+              }`}
+            >
+              <span>Open panel</span>
+              <kbd>{shortcutLabels['open-side-panel']}</kbd>
+            </div>
+          </div>
+        </section>
+
+        <div className="section-divider" />
+
+        <section className="utility-row" aria-label="Secondary actions">
+          <button className="action-btn action-btn-ghost" onClick={handleOpenPanel} type="button">
+            Open panel
+          </button>
+          <button className="action-btn action-btn-ghost" onClick={() => window.close()} type="button">
+            Dismiss
+          </button>
+        </section>
+      </div>
 
       <footer className="footer-stack">
         {status ? <p className="status">{status}</p> : null}
-        <p className="mode-description">Change shortcuts in `chrome://extensions/shortcuts`.</p>
+        <p className="mode-description">Change shortcuts in chrome://extensions/shortcuts</p>
       </footer>
     </main>
   );

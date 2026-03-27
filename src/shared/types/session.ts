@@ -39,6 +39,15 @@ const textAnnotationSchema = z.object({
   color: z.string(),
 });
 
+const cropAnnotationSchema = z.object({
+  id: z.string(),
+  kind: z.literal('crop'),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
 const legacyBoxAnnotationSchema = z
   .object({
     id: z.string(),
@@ -57,6 +66,7 @@ export const clipAnnotationSchema = z.union([
   boxAnnotationSchema,
   arrowAnnotationSchema,
   textAnnotationSchema,
+  cropAnnotationSchema,
   legacyBoxAnnotationSchema,
 ]);
 

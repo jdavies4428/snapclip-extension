@@ -6,6 +6,8 @@ import { useClipAssetUrl } from './state/useClipAssetUrl';
 import { useClipSession } from './state/useClipSession';
 import { useBridgeState } from './state/useBridgeState';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatClipLabel(clip: ClipRecord, index: number): string {
   const fallback = `Clip ${index + 1}`;
   const title = clip.title.trim() || fallback;
@@ -42,47 +44,194 @@ function getBulkPackageConfig(packageMode: HandoffPackageMode) {
   };
 }
 
+// ─── ClipGalleryTile ──────────────────────────────────────────────────────────
+
 function ClipGalleryTile({
   clip,
   index,
+  isExpanded,
+  onClick,
   onOpen,
 }: {
   clip: ClipRecord;
   index: number;
+  isExpanded: boolean;
+  onClick: (clipId: string) => void;
   onOpen: (clipId: string) => void;
 }) {
   const imageUrl = useClipAssetUrl(clip.imageAssetId);
+  const hasAnnotations = clip.annotations.length > 0;
+  const errorCount = clip.runtimeContext?.summary.errorCount ?? 0;
+  const lastHandoffState = clip.lastHandoff?.deliveryState;
+  const tileState =
+    lastHandoffState === 'delivered' || lastHandoffState === 'bundle_created'
+      ? 'sent'
+      : hasAnnotations || clip.note.trim().length > 0
+        ? 'annotated'
+        : 'idle';
 
   return (
     <button
-      aria-label={`Open ${clip.title || `clip ${index + 1}`} in the page editor`}
-      className="clip-gallery-tile"
+      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${clip.title || `clip ${index + 1}`}`}
+      aria-pressed={isExpanded}
+      className={`clip-tile${isExpanded ? ' is-expanded' : ''}`}
+      data-state={tileState}
+      onClick={() => onClick(clip.id)}
       onDoubleClick={() => onOpen(clip.id)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          onOpen(clip.id);
+          onClick(clip.id);
         }
       }}
-      title="Double-click to reopen this clip on the page."
+      title="Click to expand. Double-click to reopen in the page editor."
       type="button"
     >
       {imageUrl ? (
         <img
           alt={clip.title || `Saved clip ${index + 1}`}
-          className="clip-gallery-image"
+          className="clip-tile-image"
           src={imageUrl}
         />
       ) : (
-        <div className="clip-gallery-image clip-gallery-image-loading">Loading…</div>
+        <div className="clip-tile-image-placeholder">Loading…</div>
       )}
-      <div className="clip-gallery-overlay">
-        <span className="clip-gallery-title">{formatClipLabel(clip, index)}</span>
-        <span className="clip-gallery-meta">{formatClipMeta(clip)}</span>
+
+      {hasAnnotations && (
+        <span aria-hidden="true" className="clip-tile-badge">
+          ✎
+        </span>
+      )}
+
+      <div className="clip-tile-meta">
+        <span className="clip-tile-title">{formatClipLabel(clip, index)}</span>
+        <span className="clip-tile-errors">
+          {errorCount > 0 ? `${errorCount} err` : formatClipMeta(clip)}
+        </span>
       </div>
     </button>
   );
 }
+
+// ─── ClipDetailPanel ─────────────────────────────────────────────────────────
+
+function ClipDetailPanel({
+  clip,
+  onClose,
+  onOpen,
+}: {
+  clip: ClipRecord;
+  onClose: () => void;
+  onOpen: (clipId: string) => void;
+}) {
+  const imageUrl = useClipAssetUrl(clip.imageAssetId);
+  const summary = clip.runtimeContext?.summary;
+  const errorCount = summary?.errorCount ?? 0;
+  const warningCount = summary?.warningCount ?? 0;
+  const networkCount = summary?.networkRequestCount ?? 0;
+  const pageUrl = clip.page.url;
+
+  async function handleCopyImage() {
+    if (!imageUrl) return;
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    } catch {
+      // Silently ignore — clipboard API may not be available in all contexts.
+    }
+  }
+
+  return (
+    <div className="clip-detail">
+      {imageUrl ? (
+        <img
+          alt={clip.title || 'Clip screenshot'}
+          className="clip-detail-image"
+          src={imageUrl}
+        />
+      ) : (
+        <div className="clip-tile-image-placeholder" style={{ maxHeight: 240 }}>
+          Loading…
+        </div>
+      )}
+
+      {/* Context strip */}
+      <div className="clip-detail-context" role="list">
+        {errorCount > 0 && (
+          <span className="clip-context-chip chip-error" role="listitem">
+            {errorCount} error{errorCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        {warningCount > 0 && (
+          <span className="clip-context-chip chip-amber" role="listitem">
+            {warningCount} warn{warningCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        {networkCount > 0 && (
+          <span className="clip-context-chip" role="listitem">
+            {networkCount} req
+          </span>
+        )}
+        {pageUrl && (
+          <span
+            className="clip-context-chip"
+            role="listitem"
+            style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title={pageUrl}
+          >
+            {pageUrl}
+          </span>
+        )}
+        {errorCount === 0 && warningCount === 0 && networkCount === 0 && !pageUrl && (
+          <span className="clip-context-chip">No runtime context</span>
+        )}
+      </div>
+
+      {/* Prompt textarea */}
+      <div className="clip-detail-prompt">
+        <label className="clip-detail-prompt-label" htmlFor={`clip-note-${clip.id}`}>
+          Prompt for this clip
+        </label>
+        <textarea
+          className="clip-detail-textarea"
+          defaultValue={clip.note}
+          id={`clip-note-${clip.id}`}
+          placeholder="What's wrong here? What should the model do?"
+          rows={3}
+        />
+      </div>
+
+      {/* Action row */}
+      <div className="clip-detail-actions">
+        <button
+          className="btn btn-ghost"
+          onClick={() => void handleCopyImage()}
+          title="Copy image to clipboard"
+          type="button"
+        >
+          Copy image
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => onOpen(clip.id)}
+          type="button"
+        >
+          Export
+        </button>
+        <button
+          className="btn btn-primary"
+          onClick={onClose}
+          type="button"
+        >
+          Done ✓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const { session, isLoading } = useClipSession();
@@ -90,6 +239,9 @@ export default function App() {
   const [pendingPackageMode, setPendingPackageMode] = useState<HandoffPackageMode | null>(null);
   const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'clips' | 'session' | 'bridge' | 'export'>('clips');
+
   const bridge = useBridgeState({
     enabled: pendingPackageMode !== null,
     reloadKey: pendingPackageMode ?? 'idle',
@@ -104,7 +256,17 @@ export default function App() {
   );
   const preferredClipId = session?.activeClipId || clips[0]?.id || '';
   const bulkPackageConfig = pendingPackageMode ? getBulkPackageConfig(pendingPackageMode) : null;
+  const expandedClip = expandedClipId ? clips.find((c) => c.id === expandedClipId) ?? null : null;
 
+  // ── Tab click collapses detail when switching away ─────────────────────────
+  function handleTabChange(tab: typeof activeTab) {
+    setActiveTab(tab);
+    if (tab !== 'clips') {
+      setExpandedClipId(null);
+    }
+  }
+
+  // ── Capture tab resolving ──────────────────────────────────────────────────
   async function resolveCaptureTargetTab(): Promise<(chrome.tabs.Tab & { id: number }) | null> {
     const tabs = await chrome.tabs.query({ lastFocusedWindow: true });
     const preferredTab =
@@ -165,6 +327,7 @@ export default function App() {
       })) as SnapClipMessageResponse;
 
       setStatus(response.ok ? 'Cleared all saved images.' : response.error);
+      setExpandedClipId(null);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to clear saved images.');
     }
@@ -211,72 +374,259 @@ export default function App() {
     }
   }
 
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <main className="gallery-shell">
-        <section className="gallery-empty">
-          <p className="gallery-empty-copy">Loading saved clips…</p>
-        </section>
+      <main className="panel-shell">
+        <header className="panel-header">
+          <div className="panel-header-brand">
+            <span className="panel-header-dot" />
+            <span className="panel-header-wordmark">SnapClip</span>
+          </div>
+          <div className="panel-header-center" />
+          <div className="panel-header-right" />
+        </header>
+        <div className="panel-content">
+          <div className="panel-empty">
+            <p className="panel-empty-copy">Loading saved clips…</p>
+          </div>
+        </div>
       </main>
     );
   }
 
+  // ── Empty state ────────────────────────────────────────────────────────────
   if (!clips.length) {
     return (
-      <main className="gallery-shell">
-        <section className="gallery-empty">
-          <p className="gallery-empty-copy">
-            Saved clips appear here. Double-click a thumbnail to reopen it on the page.
-          </p>
-        </section>
+      <main className="panel-shell">
+        <header className="panel-header">
+          <div className="panel-header-brand">
+            <span className="panel-header-dot" />
+            <span className="panel-header-wordmark">SnapClip</span>
+          </div>
+          <div className="panel-header-center" />
+          <div className="panel-header-right" />
+        </header>
+
+        <div className="panel-content">
+          <div className="capture-row">
+            <button
+              className="btn btn-primary"
+              disabled={isCapturing}
+              onClick={() => void handleStartClip('visible')}
+              type="button"
+            >
+              {isCapturing ? 'Working…' : 'Clip tab'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={isCapturing}
+              onClick={() => void handleStartClip('region')}
+              type="button"
+            >
+              Use selector
+            </button>
+          </div>
+
+          <div className="panel-empty">
+            <p className="panel-empty-heading">No clips yet</p>
+            <p className="panel-empty-copy">
+              Saved clips appear here. Click a thumbnail to expand it or double-click to reopen in the page editor.
+            </p>
+          </div>
+        </div>
+
         <p aria-live="polite" className="sr-only" role="status">
           {status}
         </p>
+
+        <nav aria-label="Panel navigation" className="dock-nav">
+          <button
+            className={`dock-nav-btn${activeTab === 'clips' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('clips')}
+            type="button"
+          >
+            <span aria-hidden="true" className="dock-nav-icon">&#128444;</span>
+            Clips
+          </button>
+          <button
+            className={`dock-nav-btn${activeTab === 'session' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('session')}
+            type="button"
+          >
+            <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
+            Session
+          </button>
+          <button
+            className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('bridge')}
+            type="button"
+          >
+            <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
+            Bridge
+          </button>
+          <button
+            className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('export')}
+            type="button"
+          >
+            <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
+            Export
+          </button>
+        </nav>
       </main>
     );
   }
 
+  // ── Main panel ─────────────────────────────────────────────────────────────
   return (
-    <main className="gallery-shell">
-      <section className="gallery-actions">
-        <div className="gallery-actions-copy">
-          <strong>Capture</strong>
-          <span>Keep the sidebar open and clip again without relying on shortcuts.</span>
+    <main className="panel-shell">
+      {/* Sticky header */}
+      <header className="panel-header">
+        <div className="panel-header-brand">
+          <span className="panel-header-dot" />
+          <span className="panel-header-wordmark">SnapClip</span>
         </div>
-        <div className="gallery-actions-buttons">
-          <button disabled={isCapturing} onClick={() => void handleStartClip('visible')} type="button">
-            {isCapturing ? 'Working…' : 'Clip tab'}
-          </button>
-          <button className="secondary" disabled={isCapturing} onClick={() => void handleStartClip('region')} type="button">
-            Use selector
-          </button>
-        </div>
-      </section>
 
-      <section className="gallery-actions">
-        <div className="gallery-actions-copy">
-          <strong>Saved images</strong>
-          <span>Double-click a thumbnail to reopen it. Bulk send reuses one shared packet when you choose it.</span>
+        <div className="panel-header-center">
+          {/* Bridge status pill — shown when bridge connection is healthy */}
+          {bridge.bridgeHealth?.ok === true && (
+            <span className="bridge-status-pill">
+              <span className="bridge-status-pill-dot" />
+              connected
+            </span>
+          )}
         </div>
-        <div className="gallery-actions-buttons">
-          <button onClick={() => setPendingPackageMode('image')} type="button">
-            Send all images
-          </button>
-          <button className="secondary" onClick={() => setPendingPackageMode('packet')} type="button">
-            Send all + packet
-          </button>
-          <button className="secondary danger-button" onClick={() => void clearAllClips()} type="button">
-            Clear all
-          </button>
+
+        <div className="panel-header-right">
+          {clips.length > 0 && (
+            <button
+              className="send-all-pill"
+              disabled={isCapturing || isSendingBulk}
+              onClick={() => setPendingPackageMode('packet')}
+              type="button"
+            >
+              Send All ({clips.length})
+            </button>
+          )}
         </div>
-      </section>
+      </header>
 
-      <section aria-label="Saved clips" className="clip-gallery">
-        {clips.map((clip, index) => (
-          <ClipGalleryTile clip={clip} index={index} key={clip.id} onOpen={openClipEditor} />
-        ))}
-      </section>
+      {/* Scrollable content */}
+      <div className="panel-content">
+        {activeTab === 'clips' && (
+          <>
+            {/* Capture row */}
+            <div className="capture-row">
+              <button
+                className="btn btn-primary"
+                disabled={isCapturing}
+                onClick={() => void handleStartClip('visible')}
+                type="button"
+              >
+                {isCapturing ? 'Working…' : 'Clip tab'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                disabled={isCapturing}
+                onClick={() => void handleStartClip('region')}
+                type="button"
+              >
+                Use selector
+              </button>
+              <button
+                className="btn btn-danger"
+                disabled={isCapturing}
+                onClick={() => void clearAllClips()}
+                title="Delete all saved clips"
+                type="button"
+              >
+                Clear
+              </button>
+            </div>
 
+            {/* Camera roll grid */}
+            <section aria-label="Saved clips" className="clip-grid">
+              {clips.map((clip, index) => (
+                <ClipGalleryTile
+                  clip={clip}
+                  index={index}
+                  isExpanded={expandedClipId === clip.id}
+                  key={clip.id}
+                  onClick={(id) => setExpandedClipId(expandedClipId === id ? null : id)}
+                  onOpen={openClipEditor}
+                />
+              ))}
+            </section>
+
+            {/* Inline expanded detail — rendered below the grid */}
+            {expandedClip && (
+              <ClipDetailPanel
+                clip={expandedClip}
+                onClose={() => setExpandedClipId(null)}
+                onOpen={openClipEditor}
+              />
+            )}
+          </>
+        )}
+
+        {activeTab === 'session' && (
+          <div>
+            <div className="section-header">
+              <span className="section-title">Session</span>
+            </div>
+            <div className="panel-empty">
+              <p className="panel-empty-copy">
+                Session details will be shown here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'bridge' && (
+          <div>
+            <div className="section-header">
+              <span className="section-title">Bridge</span>
+            </div>
+            <div className="panel-empty">
+              <p className="panel-empty-copy">
+                Bridge configuration and connection status will appear here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'export' && (
+          <div>
+            <div className="section-header">
+              <span className="section-title">Export</span>
+            </div>
+            <div className="panel-empty">
+              <p className="panel-empty-copy">
+                Export options will appear here.
+              </p>
+            </div>
+            <div className="capture-row" style={{ marginTop: 12 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setPendingPackageMode('image')}
+                type="button"
+              >
+                Send all images
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setPendingPackageMode('packet')}
+                type="button"
+              >
+                Send all + packet
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Send All session picker modal */}
       {pendingPackageMode ? (
         <div aria-modal="true" className="session-picker-backdrop" role="dialog">
           <div className="session-picker-modal">
@@ -287,7 +637,7 @@ export default function App() {
               </div>
               <button
                 aria-label="Close session picker"
-                className="secondary session-picker-close"
+                className="btn btn-secondary session-picker-close"
                 onClick={() => setPendingPackageMode(null)}
                 type="button"
               >
@@ -304,17 +654,17 @@ export default function App() {
                 <p className="session-picker-empty">No live Claude or Codex sessions are available right now.</p>
               ) : (
                 <div className="session-picker-grid">
-                  {bridge.bridgeSessions.map((session) => (
+                  {bridge.bridgeSessions.map((bridgeSession) => (
                     <button
-                      className="session-picker-button secondary"
+                      className="session-picker-button"
                       disabled={isSendingBulk}
-                      key={session.id}
-                      onClick={() => void sendAllToSession(session)}
-                      title={session.target === 'codex' && session.activityState ? session.activityState : formatSessionLabel(session)}
+                      key={bridgeSession.id}
+                      onClick={() => void sendAllToSession(bridgeSession)}
+                      title={bridgeSession.target === 'codex' && bridgeSession.activityState ? bridgeSession.activityState : formatSessionLabel(bridgeSession)}
                       type="button"
                     >
-                      <span>{formatSessionLabel(session)}</span>
-                      <small>{session.cwd}</small>
+                      <span>{formatSessionLabel(bridgeSession)}</span>
+                      <small>{bridgeSession.cwd}</small>
                     </button>
                   ))}
                 </div>
@@ -323,7 +673,7 @@ export default function App() {
 
             <div className="session-picker-footer">
               <button
-                className="secondary"
+                className="btn btn-secondary"
                 disabled={isSendingBulk}
                 onClick={() => void bridge.refreshSessions()}
                 type="button"
@@ -331,7 +681,7 @@ export default function App() {
                 Refresh
               </button>
               <span>
-                Replies stay in the target session. LLM Clip only sends the local bundle one-way.
+                Replies stay in the target session. SnapClip only sends the local bundle one-way.
               </span>
             </div>
           </div>
@@ -341,6 +691,42 @@ export default function App() {
       <p aria-live="polite" className="sr-only" role="status">
         {status}
       </p>
+
+      {/* Fixed dock nav */}
+      <nav aria-label="Panel navigation" className="dock-nav">
+        <button
+          className={`dock-nav-btn${activeTab === 'clips' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('clips')}
+          type="button"
+        >
+          <span aria-hidden="true" className="dock-nav-icon">&#128444;</span>
+          Clips
+        </button>
+        <button
+          className={`dock-nav-btn${activeTab === 'session' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('session')}
+          type="button"
+        >
+          <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
+          Session
+        </button>
+        <button
+          className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('bridge')}
+          type="button"
+        >
+          <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
+          Bridge
+        </button>
+        <button
+          className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('export')}
+          type="button"
+        >
+          <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
+          Export
+        </button>
+      </nav>
     </main>
   );
 }

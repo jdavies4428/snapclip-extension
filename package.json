@@ -14,7 +14,8 @@
     "bridge:companion:start": "node bridge/start-companion.js",
     "bridge:companion:stop": "node bridge/stop-companion.js",
     "bridge:companion:uninstall": "node bridge/uninstall-companion.js",
-    "bridge:test": "node --test bridge/test/hooks.test.js bridge/test/server.test.js bridge/test/companion.test.js"
+    "bridge:test": "node --test bridge/test/hooks.test.js bridge/test/server.test.js bridge/test/companion.test.js",
+    "companion:build": "zsh companion/build-pkg.sh"
   },
   "dependencies": {
     "react": "^18.3.1",
