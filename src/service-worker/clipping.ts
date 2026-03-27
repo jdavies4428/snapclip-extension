@@ -957,7 +957,7 @@ function mountClipOverlay(
       noteField.style.boxSizing = 'border-box';
       noteField.style.resize = 'none';
       noteField.style.borderRadius = '16px';
-      noteField.style.border = '1px solid rgba(0,0,0,0.15)';
+      noteField.dataset.snapclipNotefield = '';
       noteField.style.padding = '14px 16px';
       noteField.style.background = '#FFFFFF';
       noteField.style.color = '#1A1A1A';
@@ -2157,6 +2157,14 @@ function mountClipOverlay(
           width: 0;
           height: 0;
           display: none;
+        }
+        [data-snapclip-notefield] {
+          outline: none;
+          border: 2px solid #D0C9C2 !important;
+          transition: border-color 120ms ease;
+        }
+        [data-snapclip-notefield]:focus {
+          border-color: #15783D !important;
         }
       `;
 
