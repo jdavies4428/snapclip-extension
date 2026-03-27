@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { BridgeSession, HandoffPackageMode } from '../shared/bridge/client';
 import type { SnapClipMessageResponse } from '../shared/messaging/messages';
 import type { ClipRecord } from '../shared/types/session';
 import { useClipAssetUrl } from './state/useClipAssetUrl';
 import { useClipSession } from './state/useClipSession';
 import { useBridgeState } from './state/useBridgeState';
+import { IntegrationsPanel } from './components/IntegrationsPanel';
+import { useIntegrationConfigs } from './state/useIntegrationConfigs';
+import { ShareSheet, type ShareSheetResult, type ShareSheetSelection } from '../shared/integrations/ShareSheet';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,10 +122,14 @@ function ClipDetailPanel({
   clip,
   onClose,
   onOpen,
+  onShare,
+  onSaveNote,
 }: {
   clip: ClipRecord;
   onClose: () => void;
   onOpen: (clipId: string) => void;
+  onShare: (clipId: string, draftNote: string) => void;
+  onSaveNote: (clipId: string, note: string) => Promise<void>;
 }) {
   const imageUrl = useClipAssetUrl(clip.imageAssetId);
   const summary = clip.runtimeContext?.summary;
@@ -130,6 +137,15 @@ function ClipDetailPanel({
   const warningCount = summary?.warningCount ?? 0;
   const networkCount = summary?.networkRequestCount ?? 0;
   const pageUrl = clip.page.url;
+  const [noteValue, setNoteValue] = useState(clip.note);
+
+  useEffect(() => {
+    setNoteValue(clip.note);
+  }, [clip.id, clip.note]);
+
+  async function persistNote() {
+    await onSaveNote(clip.id, noteValue);
+  }
 
   async function handleCopyImage() {
     if (!imageUrl) return;
@@ -195,10 +211,11 @@ function ClipDetailPanel({
         </label>
         <textarea
           className="clip-detail-textarea"
-          defaultValue={clip.note}
           id={`clip-note-${clip.id}`}
+          onChange={(event) => setNoteValue(event.target.value)}
           placeholder="What's wrong here? What should the model do?"
           rows={3}
+          value={noteValue}
         />
       </div>
 
@@ -214,14 +231,27 @@ function ClipDetailPanel({
         </button>
         <button
           className="btn btn-secondary"
-          onClick={() => onOpen(clip.id)}
+          onClick={() => {
+            void persistNote().then(() => onShare(clip.id, noteValue));
+          }}
+          type="button"
+        >
+          Share
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            void persistNote().then(() => onOpen(clip.id));
+          }}
           type="button"
         >
           Export
         </button>
         <button
           className="btn btn-primary"
-          onClick={onClose}
+          onClick={() => {
+            void persistNote().then(onClose);
+          }}
           type="button"
         >
           Done ✓
@@ -240,12 +270,14 @@ export default function App() {
   const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'clips' | 'history' | 'bridge' | 'export'>('clips');
+  const [activeTab, setActiveTab] = useState<'clips' | 'history' | 'integrations' | 'bridge' | 'export'>('clips');
+  const [shareSheetClipId, setShareSheetClipId] = useState<string | null>(null);
 
   const bridge = useBridgeState({
-    enabled: pendingPackageMode !== null || activeTab === 'bridge',
-    reloadKey: pendingPackageMode ?? (activeTab === 'bridge' ? 'bridge-tab' : 'idle'),
+    enabled: pendingPackageMode !== null || activeTab === 'bridge' || shareSheetClipId !== null,
+    reloadKey: pendingPackageMode ?? (activeTab === 'bridge' ? 'bridge-tab' : shareSheetClipId ?? 'idle'),
   });
+  const integrations = useIntegrationConfigs(activeTab === 'integrations' || shareSheetClipId !== null);
 
   const clips = useMemo(
     () =>
@@ -257,6 +289,7 @@ export default function App() {
   const preferredClipId = session?.activeClipId || clips[0]?.id || '';
   const bulkPackageConfig = pendingPackageMode ? getBulkPackageConfig(pendingPackageMode) : null;
   const expandedClip = expandedClipId ? clips.find((c) => c.id === expandedClipId) ?? null : null;
+  const shareSheetClip = shareSheetClipId ? clips.find((clip) => clip.id === shareSheetClipId) ?? null : null;
 
   // ── Tab click collapses detail when switching away ─────────────────────────
   function handleTabChange(tab: typeof activeTab) {
@@ -318,6 +351,94 @@ export default function App() {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Failed to open the clip editor.');
     }
+  }
+
+  async function saveClipNote(clipId: string, note: string) {
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: 'update-clip-note',
+        clipId,
+        note,
+      })) as SnapClipMessageResponse;
+
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Failed to save the clip note.');
+      throw error;
+    }
+  }
+
+  async function sendShareSelection(selection: ShareSheetSelection[]): Promise<ShareSheetResult[]> {
+    if (!shareSheetClip) {
+      return [];
+    }
+
+    const results = await Promise.all(
+      selection.map(async (item) => {
+        try {
+          if (item.kind === 'agent') {
+            const response = (await chrome.runtime.sendMessage({
+              type: 'send-bridge-session',
+              target: item.session.target,
+              workspaceId: item.session.workspaceId,
+              sessionId: item.session.id,
+              clipId: shareSheetClip.id,
+              packageMode: 'packet',
+              scope: 'active_clip',
+              evidenceProfile: 'balanced',
+              intent: 'fix',
+            })) as SnapClipMessageResponse;
+
+            if (!response.ok) {
+              throw new Error(response.error);
+            }
+
+            return {
+              id: item.id,
+              label: item.label,
+              ok: true,
+              message: `Sent to ${item.label} successfully.`,
+            };
+          }
+
+          const response = (await chrome.runtime.sendMessage({
+            type: 'send-integration-clip',
+            target: item.target,
+            clipId: shareSheetClip.id,
+          })) as SnapClipMessageResponse;
+
+          if (!response.ok) {
+            throw new Error(response.error);
+          }
+
+          return {
+            id: item.id,
+            label: item.label,
+            ok: true,
+            message: `Sent to ${item.label} successfully.`,
+          };
+        } catch (error) {
+          return {
+            id: item.id,
+            label: item.label,
+            ok: false,
+            message: `${item.label} failed: ${error instanceof Error ? error.message : 'Unknown error.'}`,
+          };
+        }
+      }),
+    );
+
+    const successCount = results.filter((result) => result.ok).length;
+    const failureCount = results.length - successCount;
+    if (successCount && !failureCount) {
+      setStatus(`Sent clip to ${successCount} destination${successCount !== 1 ? 's' : ''}.`);
+    } else if (successCount || failureCount) {
+      setStatus(`${successCount} send${successCount !== 1 ? 's' : ''} succeeded, ${failureCount} failed.`);
+    }
+
+    return results;
   }
 
   async function clearAllClips() {
@@ -565,6 +686,8 @@ export default function App() {
                 clip={expandedClip}
                 onClose={() => setExpandedClipId(null)}
                 onOpen={openClipEditor}
+                onSaveNote={saveClipNote}
+                onShare={(clipId) => setShareSheetClipId(clipId)}
               />
             )}
           </>
@@ -653,6 +776,10 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'integrations' && (
+          <IntegrationsPanel onStatus={setStatus} />
         )}
 
         {activeTab === 'export' && (
@@ -747,6 +874,21 @@ export default function App() {
         </div>
       ) : null}
 
+      {shareSheetClip ? (
+        <ShareSheet
+          bridgeError={bridge.bridgeError}
+          bridgeLoading={bridge.isBridgeLoading || bridge.isSessionLoading}
+          bridgeSessions={bridge.bridgeSessions}
+          integrations={integrations.summaries}
+          onClose={() => setShareSheetClipId(null)}
+          onOpenIntegrations={() => {
+            setShareSheetClipId(null);
+            handleTabChange('integrations');
+          }}
+          onSend={sendShareSelection}
+        />
+      ) : null}
+
       <p aria-live="polite" className="sr-only" role="status">
         {status}
       </p>
@@ -768,6 +910,14 @@ export default function App() {
         >
           <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
           Session
+        </button>
+        <button
+          className={`dock-nav-btn${activeTab === 'integrations' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('integrations')}
+          type="button"
+        >
+          <span aria-hidden="true" className="dock-nav-icon">&#35;</span>
+          Integrations
         </button>
         <button
           className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}

@@ -5,6 +5,7 @@ import { loadBridgeActiveSessions, loadBridgeHealth, loadBridgeSessions, loadBri
 import { ensureSupportedWindow, getActiveTab } from './permissions';
 import { commitClipToSession, exportClipSession, getOrCreateSession } from './session';
 import { clearClipSession, getClipSession, getStoredClipRecord, updateClipAnnotations, updateClipHandoff, updateClipNote, updateClipTitle } from './storage';
+import { sendClipToIntegration } from './integration-handoff';
 
 async function openSidePanelForActiveWindow(): Promise<void> {
   const tab = await getActiveTab();
@@ -155,6 +156,17 @@ export async function routeMessage(message: SnapClipMessage): Promise<SnapClipMe
           [STORAGE_KEYS.lastLaunchError]: errorMessage,
         });
         return { ok: false, error: errorMessage };
+      }
+    }
+    case 'send-integration-clip': {
+      try {
+        const result = await sendClipToIntegration(message);
+        return { ok: true, session: result.session };
+      } catch (error) {
+        return {
+          ok: false,
+          error: normalizeBridgeMessageError(error, 'The integration send failed.'),
+        };
       }
     }
     case 'export-clip-session': {

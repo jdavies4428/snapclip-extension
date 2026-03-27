@@ -11,6 +11,7 @@ import type { EvidenceProfile } from '../export/evidence';
 import type { ClipAnnotation, ClipHandoffRecord, ClipMode, ClipRect, ClipSession, RuntimeContext } from '../types/session';
 import type { HandoffScope } from '../ai/prompts';
 import type { PageContext } from '../types/snapshot';
+import type { IntegrationTarget } from '../integrations/types';
 
 export type OpenSidePanelMessage = {
   type: 'open-side-panel';
@@ -123,6 +124,14 @@ export type ExportClipSessionMessage = {
   format: 'json' | 'markdown';
 };
 
+export type SendIntegrationClipMessage = {
+  type: 'send-integration-clip';
+  target: IntegrationTarget;
+  clipId?: string;
+  draftTitle?: string;
+  draftNote?: string;
+};
+
 export type OffscreenCopyTextMessage = {
   type: 'offscreen-copy-text';
   text: string;
@@ -161,6 +170,7 @@ export type SnapClipMessage =
   | UpdateClipAnnotationsMessage
   | UpdateClipHandoffMessage
   | ExportClipSessionMessage
+  | SendIntegrationClipMessage
   | OffscreenCopyTextMessage
   | OffscreenCopyImageMessage
   | OffscreenCopyPacketMessage
