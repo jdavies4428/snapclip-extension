@@ -15,29 +15,29 @@ export default defineManifest({
   commands: {
     'start-region-clip': {
       suggested_key: {
-        default: 'Alt+Shift+S',
-        mac: 'Option+Shift+S',
+        default: 'Alt+Shift+C',
+        mac: 'Option+Shift+C',
       },
       description: 'Start clipping a selected region on the current tab.',
     },
     'start-visible-clip': {
       suggested_key: {
-        default: 'Alt+Shift+D',
-        mac: 'Option+Shift+D',
+        default: 'Alt+Shift+T',
+        mac: 'Option+Shift+T',
       },
       description: 'Clip the full visible current tab.',
     },
     'open-last-clip-editor': {
       suggested_key: {
-        default: 'Alt+Shift+E',
-        mac: 'Option+Shift+E',
+        default: 'Alt+Shift+A',
+        mac: 'Option+Shift+A',
       },
       description: 'Toggle the editor for the most recent clip.',
     },
     'open-side-panel': {
       suggested_key: {
-        default: 'Alt+Shift+P',
-        mac: 'Option+Shift+P',
+        default: 'Alt+Shift+S',
+        mac: 'Option+Shift+S',
       },
       description: 'Open the LLM Clip side panel.',
     },
