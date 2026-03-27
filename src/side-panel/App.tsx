@@ -679,7 +679,7 @@ export default function App() {
         {activeTab === 'history' && (
           <div>
             <div className="section-header">
-              <span className="section-title">History</span>
+              <span className="section-title">Session</span>
               {clips.length > 0 && (
                 <span className="bridge-status-pill">{clips.length} clip{clips.length !== 1 ? 's' : ''}</span>
               )}
