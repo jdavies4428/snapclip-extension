@@ -559,7 +559,7 @@ body {
   right: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
@@ -786,6 +786,44 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.bridge-send-panel {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #FDFCFB 0%, #F7F3EE 100%);
+}
+
+.bridge-send-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bridge-send-copy {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.bridge-send-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bridge-send-actions .btn {
+  flex: 1;
+}
+
+.bridge-send-empty {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .bridge-info-row {

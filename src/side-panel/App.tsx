@@ -51,8 +51,8 @@ function PanelDockNav({
   activeTab,
   onTabChange,
 }: {
-  activeTab: 'clips' | 'history' | 'integrations' | 'bridge' | 'export';
-  onTabChange: (tab: 'clips' | 'history' | 'integrations' | 'bridge' | 'export') => void;
+  activeTab: 'clips' | 'history' | 'integrations' | 'bridge';
+  onTabChange: (tab: 'clips' | 'history' | 'integrations' | 'bridge') => void;
 }) {
   return (
     <nav aria-label="Panel navigation" className="dock-nav">
@@ -87,14 +87,6 @@ function PanelDockNav({
       >
         <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
         Bridge
-      </button>
-      <button
-        className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
-        onClick={() => onTabChange('export')}
-        type="button"
-      >
-        <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
-        Export
       </button>
     </nav>
   );
@@ -298,7 +290,7 @@ function ClipDetailPanel({
           }}
           type="button"
         >
-          Export
+          Edit
         </button>
         <button
           className="btn btn-primary"
@@ -323,7 +315,7 @@ export default function App() {
   const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'clips' | 'history' | 'integrations' | 'bridge' | 'export'>('clips');
+  const [activeTab, setActiveTab] = useState<'clips' | 'history' | 'integrations' | 'bridge'>('clips');
   const [shareSheetClipId, setShareSheetClipId] = useState<string | null>(null);
 
   const bridge = useBridgeState({
@@ -718,6 +710,33 @@ export default function App() {
                 <span className="bridge-status-pill bridge-status-pill--connected">● connected</span>
               )}
             </div>
+            <div className="bridge-send-panel">
+              <p className="bridge-send-title">Send saved clips into a live Claude or Codex session.</p>
+              <p className="bridge-send-copy">
+                Images only sends screenshots and your notes. Images + packet also includes annotations and debug evidence.
+              </p>
+              <div className="bridge-send-actions">
+                <button
+                  className="btn btn-secondary"
+                  disabled={isSendingBulk || !clips.length}
+                  onClick={() => setPendingPackageMode('image')}
+                  type="button"
+                >
+                  Send images only
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={isSendingBulk || !clips.length}
+                  onClick={() => setPendingPackageMode('packet')}
+                  type="button"
+                >
+                  Send images + packet
+                </button>
+              </div>
+              {!clips.length && (
+                <p className="bridge-send-empty">Capture at least one clip before sending to an agent session.</p>
+              )}
+            </div>
             {bridge.isBridgeLoading ? (
               <div className="panel-empty"><p className="panel-empty-copy">Connecting to bridge…</p></div>
             ) : bridge.bridgeError ? (
@@ -763,35 +782,6 @@ export default function App() {
 
         {activeTab === 'integrations' && (
           <IntegrationsPanel onStatus={setStatus} />
-        )}
-
-        {activeTab === 'export' && (
-          <div>
-            <div className="section-header">
-              <span className="section-title">Export</span>
-            </div>
-            <div className="panel-empty">
-              <p className="panel-empty-copy">
-                Export options will appear here.
-              </p>
-            </div>
-            <div className="capture-row" style={{ marginTop: 12 }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setPendingPackageMode('image')}
-                type="button"
-              >
-                Send images + notes
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => setPendingPackageMode('packet')}
-                type="button"
-              >
-                Send images + debug
-              </button>
-            </div>
-          </div>
         )}
       </div>
 
