@@ -76,10 +76,21 @@ async function openLastCapturedClipEditor() {
   });
 }
 
-chrome.commands.onCommand.addListener(async (command) => {
+// chrome.commands.onCommand passes an optional tab as the second arg in
+// newer Chrome builds, but @types/chrome omits it — cast to access it.
+type CommandListener = (command: string, tab?: chrome.tabs.Tab) => void;
+(chrome.commands.onCommand as chrome.events.Event<CommandListener>).addListener(async (command, commandTab) => {
   try {
     if (command === 'open-side-panel') {
-      await openSidePanelForLastFocusedWindow();
+      // Use the tab passed directly by the command event to avoid async
+      // getActiveTab() breaking the user gesture context in MV3.
+      if (typeof commandTab?.id === 'number') {
+        await chrome.sidePanel.open({ tabId: commandTab.id });
+      } else if (typeof commandTab?.windowId === 'number') {
+        await chrome.sidePanel.open({ windowId: commandTab.windowId });
+      } else {
+        await openSidePanelForLastFocusedWindow();
+      }
       return;
     }
 

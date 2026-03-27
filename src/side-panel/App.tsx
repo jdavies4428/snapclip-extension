@@ -240,7 +240,7 @@ export default function App() {
   const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'clips' | 'session' | 'bridge' | 'export'>('clips');
+  const [activeTab, setActiveTab] = useState<'clips' | 'history' | 'bridge' | 'export'>('clips');
 
   const bridge = useBridgeState({
     enabled: pendingPackageMode !== null || activeTab === 'bridge',
@@ -450,12 +450,12 @@ export default function App() {
             Clips
           </button>
           <button
-            className={`dock-nav-btn${activeTab === 'session' ? ' is-active' : ''}`}
-            onClick={() => handleTabChange('session')}
+            className={`dock-nav-btn${activeTab === 'history' ? ' is-active' : ''}`}
+            onClick={() => handleTabChange('history')}
             type="button"
           >
             <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
-            Session
+            History
           </button>
           <button
             className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
@@ -570,10 +570,10 @@ export default function App() {
           </>
         )}
 
-        {activeTab === 'session' && (
+        {activeTab === 'history' && (
           <div>
             <div className="section-header">
-              <span className="section-title">Session</span>
+              <span className="section-title">History</span>
               {clips.length > 0 && (
                 <span className="bridge-status-pill">{clips.length} clip{clips.length !== 1 ? 's' : ''}</span>
               )}
@@ -762,8 +762,8 @@ export default function App() {
           Clips
         </button>
         <button
-          className={`dock-nav-btn${activeTab === 'session' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('session')}
+          className={`dock-nav-btn${activeTab === 'history' ? ' is-active' : ''}`}
+          onClick={() => handleTabChange('history')}
           type="button"
         >
           <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
