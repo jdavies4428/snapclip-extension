@@ -1326,6 +1326,8 @@ function mountClipOverlay(
       stageImage.style.maxHeight = '100%';
       stageImage.style.objectFit = 'contain';
       stageImage.style.userSelect = 'none';
+      stageImage.style.pointerEvents = 'none';
+      stageImage.style.setProperty('-webkit-user-drag', 'none');
       stageImage.draggable = false;
 
       stage.append(stageImage);
@@ -2996,6 +2998,7 @@ function mountClipOverlay(
         workspaceName?: string | null;
         target: 'claude' | 'codex';
         label: string;
+        activityState?: string | null;
         surface?: string;
         pendingApprovalCount?: number;
       };
@@ -3231,7 +3234,9 @@ function mountClipOverlay(
               sessionButton.type = 'button';
               const isSendingSession = isBridgeSending && activeClaudeSessionId === session.id;
               const isSentSession = !isBridgeSending && successfulClaudeSessionId === session.id;
+              const sessionTooltip = session.target === 'codex' && session.activityState ? session.activityState : session.label;
               sessionButton.textContent = isSendingSession ? 'Sending...' : isSentSession ? 'Sent' : session.label;
+              sessionButton.title = sessionTooltip;
               sessionButton.disabled = isBridgeLoading || isBridgeSending;
               sessionButton.style.border = '1px solid transparent';
               sessionButton.style.borderRadius = '12px';
@@ -3468,6 +3473,7 @@ function mountClipOverlay(
                 workspaceName?: string | null;
                 target: 'claude' | 'codex';
                 label: string;
+                activityState?: string | null;
                 surface?: string;
                 pendingApprovalCount?: number;
               }) => ({
@@ -3476,6 +3482,7 @@ function mountClipOverlay(
                 workspaceName: session.workspaceName ?? null,
                 target: session.target,
                 label: session.label,
+                activityState: session.activityState ?? null,
                 surface: session.surface,
                 pendingApprovalCount: session.pendingApprovalCount,
               }));
@@ -3575,6 +3582,7 @@ function mountClipOverlay(
             workspaceName?: string | null;
             target: 'claude' | 'codex';
             label: string;
+            activityState?: string | null;
             surface?: string;
             pendingApprovalCount?: number;
           }) => ({
@@ -3583,6 +3591,7 @@ function mountClipOverlay(
             workspaceName: session.workspaceName ?? null,
             target: session.target,
             label: session.label,
+            activityState: session.activityState ?? null,
             surface: session.surface,
             pendingApprovalCount: session.pendingApprovalCount,
           }));

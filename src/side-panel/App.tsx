@@ -239,6 +239,7 @@ export default function App() {
                       disabled={isSendingBulk}
                       key={session.id}
                       onClick={() => void sendAllToSession(session)}
+                      title={session.target === 'codex' && session.activityState ? session.activityState : formatSessionLabel(session)}
                       type="button"
                     >
                       <span>{formatSessionLabel(session)}</span>

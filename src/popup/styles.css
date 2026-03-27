@@ -13,7 +13,7 @@ body,
 #root {
   width: 428px;
   min-width: 428px;
-  min-height: 708px;
+  min-height: 620px;
 }
 
 body {
@@ -75,9 +75,9 @@ button:focus-visible {
 
 .popup-shell {
   display: grid;
-  gap: 12px;
-  min-height: 708px;
-  padding: 14px;
+  gap: 10px;
+  min-height: 620px;
+  padding: 12px;
   overflow: visible;
   position: relative;
   box-sizing: border-box;
@@ -104,7 +104,7 @@ button:focus-visible {
 
 .popup-header {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .brand-row {
@@ -137,13 +137,13 @@ button:focus-visible {
 
 .hero-copy {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .popup-header h1 {
   margin: 0;
-  font-size: 23px;
-  line-height: 0.96;
+  font-size: 21px;
+  line-height: 0.98;
   letter-spacing: -0.04em;
   max-width: none;
 }
@@ -173,7 +173,7 @@ button:focus-visible {
 }
 
 .lede {
-  font-size: 12px;
+  font-size: 11px;
   max-width: none;
 }
 
@@ -193,12 +193,17 @@ button:focus-visible {
   gap: 8px;
 }
 
+.action-stack {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .action-card {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   width: 100%;
   text-align: left;
-  padding: 12px 13px;
+  min-height: 94px;
+  padding: 10px 11px;
   border-radius: 16px;
   border: 1px solid rgba(156, 178, 209, 0.14);
   background:
@@ -221,24 +226,24 @@ button:focus-visible {
 
 .action-kicker {
   color: #7fb6ff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .action-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .action-copy {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .shortcut-panel {
-  padding: 14px;
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid rgba(156, 178, 209, 0.14);
   background: rgba(10, 15, 27, 0.74);
@@ -247,15 +252,14 @@ button:focus-visible {
 
 .panel-head {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 4px;
 }
 
 .panel-hint {
   font-size: 11px;
-  text-align: right;
-  max-width: 22ch;
+  text-align: left;
+  max-width: none;
 }
 
 .shortcut-list {
@@ -269,7 +273,7 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 11px 12px;
+  padding: 10px 11px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   color: #dbe6f7;
@@ -285,7 +289,11 @@ button:focus-visible {
 }
 
 .shortcut-chip kbd {
-  padding: 5px 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 5px 8px;
   border-radius: 9px;
   background: rgba(8, 15, 28, 0.92);
   border: 1px solid rgba(127, 182, 255, 0.16);
@@ -316,7 +324,7 @@ button:focus-visible {
 }
 
 .footer-stack {
-  gap: 8px;
+  gap: 6px;
 }
 
 .status {

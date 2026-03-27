@@ -35,11 +35,17 @@ async function openSidePanelForLastFocusedWindow() {
     tabs.find((tab) => typeof tab.windowId === 'number' && tab.active) ??
     tabs.find((tab) => typeof tab.windowId === 'number');
 
-  if (typeof targetTab?.windowId !== 'number') {
-    throw new Error('No active browser window was found.');
+  if (typeof targetTab?.id === 'number') {
+    await chrome.sidePanel.open({ tabId: targetTab.id });
+    return;
   }
 
-  await chrome.sidePanel.open({ windowId: targetTab.windowId });
+  if (typeof targetTab?.windowId === 'number') {
+    await chrome.sidePanel.open({ windowId: targetTab.windowId });
+    return;
+  }
+
+  throw new Error('No active browser window was found.');
 }
 
 async function openLastCapturedClipEditor() {

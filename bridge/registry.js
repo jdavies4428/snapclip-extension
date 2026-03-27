@@ -89,6 +89,20 @@ function formatSessionLabel(cwd, sessionId) {
   return `${basename(cwd) || cwd} (${String(sessionId).slice(0, 8)})`;
 }
 
+function compactSessionTitle(title, fallback, maxWords = 8, maxChars = 36) {
+  const normalized = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim() : '';
+  if (!normalized) {
+    return fallback;
+  }
+
+  const limitedWords = normalized.split(' ').slice(0, maxWords).join(' ');
+  if (limitedWords.length <= maxChars) {
+    return limitedWords;
+  }
+
+  return `${limitedWords.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 function normalizeIsoTimestamp(value, fallback) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return fallback;
@@ -635,12 +649,13 @@ export class BridgeRegistry {
         const workspace = this.ensureWorkspace(cwd, inferWorkspaceSource('codex'), timestamp);
         const title = typeof entry.title === 'string' ? entry.title.trim() : '';
         const labelBase = basename(cwd) || cwd;
+        const fallbackLabel = `${labelBase} (Codex ${String(entry.id).slice(0, 6)})`;
 
         return {
           id: entry.id,
           workspaceId: workspace.id,
           target: 'codex',
-          label: `${labelBase} (Codex ${String(entry.id).slice(0, 6)})`,
+          label: compactSessionTitle(title, fallbackLabel),
           surface: 'codex',
           cwd,
           lastSeenAt: normalizeIsoTimestamp(entry.updatedAt * 1000, timestamp),

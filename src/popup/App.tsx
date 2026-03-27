@@ -144,8 +144,7 @@ export default function App() {
         <div className="hero-copy">
           <h1>Clip the tab, hand off the evidence.</h1>
           <p className="lede">
-            The popup is a fast launcher. The shortcut stays primary, the bundle stays local, and the next action is
-            always obvious.
+            Fast launcher. Shortcuts stay primary. Everything stays local.
           </p>
         </div>
       </header>
@@ -158,8 +157,8 @@ export default function App() {
           type="button"
         >
           <span className="action-kicker">Fast path</span>
-          <span className="action-title">{isLoading ? 'Working...' : 'Clip visible tab'}</span>
-          <span className="action-copy">Capture the current viewport and open the annotation workspace.</span>
+          <span className="action-title">{isLoading ? 'Working...' : 'Clip tab'}</span>
+          <span className="action-copy">Capture the viewport.</span>
         </button>
         <button
           className="action-card"
@@ -168,15 +167,15 @@ export default function App() {
           type="button"
         >
           <span className="action-kicker">Targeted path</span>
-          <span className="action-title">Clip selected area</span>
-          <span className="action-copy">Drag a region on the page when you only need the broken slice.</span>
+          <span className="action-title">Use selector</span>
+          <span className="action-copy">Drag the exact region.</span>
         </button>
       </section>
 
       <section className="shortcut-panel" aria-label="Keyboard shortcuts">
         <div className="panel-head">
           <p className="eyebrow">Shortcuts</p>
-          <p className="panel-hint">Use these when you want the quick clipboard lane instead of the full editor.</p>
+          <p className="panel-hint">Use these for the fast path instead of opening the full editor.</p>
         </div>
         <div className="shortcut-list">
           <div className="shortcut-chip">
