@@ -47,6 +47,59 @@ function getBulkPackageConfig(packageMode: HandoffPackageMode) {
   };
 }
 
+function PanelDockNav({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: 'clips' | 'history' | 'integrations' | 'bridge' | 'export';
+  onTabChange: (tab: 'clips' | 'history' | 'integrations' | 'bridge' | 'export') => void;
+}) {
+  return (
+    <nav aria-label="Panel navigation" className="dock-nav">
+      <button
+        className={`dock-nav-btn${activeTab === 'clips' ? ' is-active' : ''}`}
+        onClick={() => onTabChange('clips')}
+        type="button"
+      >
+        <span aria-hidden="true" className="dock-nav-icon">&#128444;</span>
+        Clips
+      </button>
+      <button
+        className={`dock-nav-btn${activeTab === 'history' ? ' is-active' : ''}`}
+        onClick={() => onTabChange('history')}
+        type="button"
+      >
+        <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
+        Session
+      </button>
+      <button
+        className={`dock-nav-btn${activeTab === 'integrations' ? ' is-active' : ''}`}
+        onClick={() => onTabChange('integrations')}
+        type="button"
+      >
+        <span aria-hidden="true" className="dock-nav-icon">&#35;</span>
+        Integrations
+      </button>
+      <button
+        className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
+        onClick={() => onTabChange('bridge')}
+        type="button"
+      >
+        <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
+        Bridge
+      </button>
+      <button
+        className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
+        onClick={() => onTabChange('export')}
+        type="button"
+      >
+        <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
+        Export
+      </button>
+    </nav>
+  );
+}
+
 // ─── ClipGalleryTile ──────────────────────────────────────────────────────────
 
 function ClipGalleryTile({
@@ -561,40 +614,7 @@ export default function App() {
           {status}
         </p>
 
-        <nav aria-label="Panel navigation" className="dock-nav">
-          <button
-            className={`dock-nav-btn${activeTab === 'clips' ? ' is-active' : ''}`}
-            onClick={() => handleTabChange('clips')}
-            type="button"
-          >
-            <span aria-hidden="true" className="dock-nav-icon">&#128444;</span>
-            Clips
-          </button>
-          <button
-            className={`dock-nav-btn${activeTab === 'history' ? ' is-active' : ''}`}
-            onClick={() => handleTabChange('history')}
-            type="button"
-          >
-            <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
-            History
-          </button>
-          <button
-            className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
-            onClick={() => handleTabChange('bridge')}
-            type="button"
-          >
-            <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
-            Bridge
-          </button>
-          <button
-            className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
-            onClick={() => handleTabChange('export')}
-            type="button"
-          >
-            <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
-            Export
-          </button>
-        </nav>
+        <PanelDockNav activeTab={activeTab} onTabChange={handleTabChange} />
       </main>
     );
   }
@@ -894,48 +914,7 @@ export default function App() {
       </p>
 
       {/* Fixed dock nav */}
-      <nav aria-label="Panel navigation" className="dock-nav">
-        <button
-          className={`dock-nav-btn${activeTab === 'clips' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('clips')}
-          type="button"
-        >
-          <span aria-hidden="true" className="dock-nav-icon">&#128444;</span>
-          Clips
-        </button>
-        <button
-          className={`dock-nav-btn${activeTab === 'history' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('history')}
-          type="button"
-        >
-          <span aria-hidden="true" className="dock-nav-icon">&#128196;</span>
-          Session
-        </button>
-        <button
-          className={`dock-nav-btn${activeTab === 'integrations' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('integrations')}
-          type="button"
-        >
-          <span aria-hidden="true" className="dock-nav-icon">&#35;</span>
-          Integrations
-        </button>
-        <button
-          className={`dock-nav-btn${activeTab === 'bridge' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('bridge')}
-          type="button"
-        >
-          <span aria-hidden="true" className="dock-nav-icon">&#128279;</span>
-          Bridge
-        </button>
-        <button
-          className={`dock-nav-btn${activeTab === 'export' ? ' is-active' : ''}`}
-          onClick={() => handleTabChange('export')}
-          type="button"
-        >
-          <span aria-hidden="true" className="dock-nav-icon">&#128228;</span>
-          Export
-        </button>
-      </nav>
+      <PanelDockNav activeTab={activeTab} onTabChange={handleTabChange} />
     </main>
   );
 }
