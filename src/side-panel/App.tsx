@@ -569,56 +569,6 @@ export default function App() {
     );
   }
 
-  // ── Empty state ────────────────────────────────────────────────────────────
-  if (!clips.length) {
-    return (
-      <main className="panel-shell">
-        <header className="panel-header">
-          <div className="panel-header-brand">
-            <span className="panel-header-dot" />
-            <span className="panel-header-wordmark">SnapClip</span>
-          </div>
-          <div className="panel-header-center" />
-          <div className="panel-header-right" />
-        </header>
-
-        <div className="panel-content">
-          <div className="capture-row">
-            <button
-              className="btn btn-primary"
-              disabled={isCapturing}
-              onClick={() => void handleStartClip('visible')}
-              type="button"
-            >
-              {isCapturing ? 'Working…' : 'Clip tab'}
-            </button>
-            <button
-              className="btn btn-secondary"
-              disabled={isCapturing}
-              onClick={() => void handleStartClip('region')}
-              type="button"
-            >
-              Use selector
-            </button>
-          </div>
-
-          <div className="panel-empty">
-            <p className="panel-empty-heading">No clips yet</p>
-            <p className="panel-empty-copy">
-              Saved clips appear here. Click a thumbnail to expand it or double-click to reopen in the page editor.
-            </p>
-          </div>
-        </div>
-
-        <p aria-live="polite" className="sr-only" role="status">
-          {status}
-        </p>
-
-        <PanelDockNav activeTab={activeTab} onTabChange={handleTabChange} />
-      </main>
-    );
-  }
-
   // ── Main panel ─────────────────────────────────────────────────────────────
   return (
     <main className="panel-shell">
@@ -675,40 +625,53 @@ export default function App() {
               >
                 Use selector
               </button>
-              <button
-                className="btn btn-danger"
-                disabled={isCapturing}
-                onClick={() => void clearAllClips()}
-                title="Delete all saved clips"
-                type="button"
-              >
-                Clear
-              </button>
+              {clips.length > 0 && (
+                <button
+                  className="btn btn-danger"
+                  disabled={isCapturing}
+                  onClick={() => void clearAllClips()}
+                  title="Delete all saved clips"
+                  type="button"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
-            {/* Camera roll grid */}
-            <section aria-label="Saved clips" className="clip-grid">
-              {clips.map((clip, index) => (
-                <ClipGalleryTile
-                  clip={clip}
-                  index={index}
-                  isExpanded={expandedClipId === clip.id}
-                  key={clip.id}
-                  onClick={(id) => setExpandedClipId(expandedClipId === id ? null : id)}
-                  onOpen={openClipEditor}
-                />
-              ))}
-            </section>
+            {clips.length === 0 ? (
+              <div className="panel-empty">
+                <p className="panel-empty-heading">No clips yet</p>
+                <p className="panel-empty-copy">
+                  Saved clips appear here. Click a thumbnail to expand it or double-click to reopen in the page editor.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Camera roll grid */}
+                <section aria-label="Saved clips" className="clip-grid">
+                  {clips.map((clip, index) => (
+                    <ClipGalleryTile
+                      clip={clip}
+                      index={index}
+                      isExpanded={expandedClipId === clip.id}
+                      key={clip.id}
+                      onClick={(id) => setExpandedClipId(expandedClipId === id ? null : id)}
+                      onOpen={openClipEditor}
+                    />
+                  ))}
+                </section>
 
-            {/* Inline expanded detail — rendered below the grid */}
-            {expandedClip && (
-              <ClipDetailPanel
-                clip={expandedClip}
-                onClose={() => setExpandedClipId(null)}
-                onOpen={openClipEditor}
-                onSaveNote={saveClipNote}
-                onShare={(clipId) => setShareSheetClipId(clipId)}
-              />
+                {/* Inline expanded detail — rendered below the grid */}
+                {expandedClip && (
+                  <ClipDetailPanel
+                    clip={expandedClip}
+                    onClose={() => setExpandedClipId(null)}
+                    onOpen={openClipEditor}
+                    onSaveNote={saveClipNote}
+                    onShare={(clipId) => setShareSheetClipId(clipId)}
+                  />
+                )}
+              </>
             )}
           </>
         )}
